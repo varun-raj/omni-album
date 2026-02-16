@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import Network
 #if canImport(ActivityKit)
 import ActivityKit
 #endif
@@ -22,10 +23,22 @@ final class UploadQueueService: ObservableObject {
     @Published private(set) var queue: [UploadTask] = []
     @Published private(set) var activeUpload: UploadTask?
     @Published private(set) var isProcessing = false
+    @Published private(set) var isWaitingForWiFi = false
 
     private let persistenceService = UploadQueuePersistenceService()
     private let uploadService = ImmichUploadService()
     private var processingTask: Task<Void, Never>?
+    private let networkMonitor = NWPathMonitor()
+    private let networkQueue = DispatchQueue(label: "com.skcript.immich-share.uploadnetwork")
+    private var currentNetworkPath: NWPath?
+
+    private var wifiOnlyUpload: Bool {
+        UserDefaults.standard.bool(forKey: SettingsKeys.wifiOnlyUpload)
+    }
+
+    private var isOnWiFi: Bool {
+        currentNetworkPath?.usesInterfaceType(.wifi) == true
+    }
 
     #if canImport(ActivityKit)
     @available(iOS 16.2, *)
@@ -33,6 +46,20 @@ final class UploadQueueService: ObservableObject {
     #endif
 
     private init() {
+        // Set up network monitoring for Wi-Fi only mode
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.currentNetworkPath = path
+                // Auto-resume if Wi-Fi becomes available
+                if self.isWaitingForWiFi && (path.usesInterfaceType(.wifi) || !self.wifiOnlyUpload) {
+                    self.isWaitingForWiFi = false
+                    self.startProcessing()
+                }
+            }
+        }
+        networkMonitor.start(queue: networkQueue)
+
         // Load persisted queue on init
         Task {
             await restoreQueue()
@@ -171,6 +198,15 @@ final class UploadQueueService: ObservableObject {
         var isFirstUpload = true
 
         while !Task.isCancelled {
+            // Check Wi-Fi requirement
+            if wifiOnlyUpload && !isOnWiFi {
+                print("UploadQueue: Wi-Fi only mode, waiting for Wi-Fi...")
+                isWaitingForWiFi = true
+                isProcessing = false
+                endActivityIfNeeded()
+                return
+            }
+
             // Find next pending task
             guard let nextIndex = queue.firstIndex(where: { $0.status == .pending }) else {
                 print("UploadQueue: No more pending tasks, stopping")

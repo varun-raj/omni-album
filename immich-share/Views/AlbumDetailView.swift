@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Kingfisher
+import Photos
 
 private struct LightboxSelection: Identifiable {
     let id: Int
@@ -22,9 +23,9 @@ struct AlbumDetailView: View {
     @State private var showingUploadQueue = false
     @State private var navigateToUpload = false
     @State private var hasAppeared = false
-
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     init(album: DisplayAlbum) {
         self.album = album
@@ -34,8 +35,10 @@ struct AlbumDetailView: View {
     private static let gridSpacing: CGFloat = 2
     private static let headerHeight: CGFloat = 380
 
+    /// Adaptive column count: 3 on iPhone, 5 on iPad
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: Self.gridSpacing), count: 3)
+        let count = horizontalSizeClass == .regular ? 5 : 3
+        return Array(repeating: GridItem(.flexible(), spacing: Self.gridSpacing), count: count)
     }
 
     // Nav bar title fades in as header title fades out
@@ -369,6 +372,8 @@ struct AlbumDetailView: View {
             ForEach(viewModel.assets.indices, id: \.self) { index in
                 let asset = viewModel.assets[index]
                 Button {
+                    let generator = UIImpactFeedbackGenerator(style: .light)
+                    generator.impactOccurred()
                     lightboxSelection = LightboxSelection(id: index)
                 } label: {
                     PhotoGridCell(
@@ -410,6 +415,8 @@ private struct PhotoGridCell: View {
     let url: URL?
     let isVideo: Bool
     let duration: String?
+    var isSelecting: Bool = false
+    var isSelected: Bool = false
 
     var body: some View {
         Color.clear
@@ -422,6 +429,32 @@ private struct PhotoGridCell: View {
             .overlay(alignment: .bottomTrailing) {
                 if isVideo {
                     videoBadge
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if isSelecting {
+                    ZStack {
+                        Circle()
+                            .fill(isSelected ? Color.accentColor : Color.black.opacity(0.3))
+                            .frame(width: 26, height: 26)
+                        if isSelected {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                        } else {
+                            Circle()
+                                .strokeBorder(.white, lineWidth: 2)
+                                .frame(width: 26, height: 26)
+                        }
+                    }
+                    .padding(6)
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .overlay {
+                if isSelecting && isSelected {
+                    RoundedRectangle(cornerRadius: 0)
+                        .strokeBorder(Color.accentColor, lineWidth: 3)
                 }
             }
     }

@@ -337,17 +337,46 @@ final class ImmichUploadService {
         body: Data,
         progressHandler: @escaping (Double) -> Void
     ) async throws -> (Data, URLResponse) {
-        // For simplicity, we'll upload without streaming progress
-        // In a production app, you'd use URLSessionUploadTask with delegate
-        var mutableRequest = request
-        mutableRequest.httpBody = body
+        let delegate = UploadProgressDelegate(progressHandler: progressHandler)
+        let delegateSession = URLSession(
+            configuration: session.configuration,
+            delegate: delegate,
+            delegateQueue: nil
+        )
 
-        // Simulate progress for now (actual progress requires URLSessionTaskDelegate)
-        progressHandler(0.1)
+        defer { delegateSession.finishTasksAndInvalidate() }
 
-        let (data, response) = try await session.data(for: mutableRequest)
+        // Write body to temp file for upload task (required for delegate progress)
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try body.write(to: tempFile)
+        defer { try? FileManager.default.removeItem(at: tempFile) }
 
+        let (data, response) = try await delegateSession.upload(for: request, fromFile: tempFile)
         progressHandler(1.0)
         return (data, response)
+    }
+}
+
+// MARK: - Upload Progress Delegate
+
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+    private let progressHandler: (Double) -> Void
+
+    init(progressHandler: @escaping (Double) -> Void) {
+        self.progressHandler = progressHandler
+        super.init()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64,
+        totalBytesExpectedToSend: Int64
+    ) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        let progress = Double(totalBytesSent) / Double(totalBytesExpectedToSend)
+        progressHandler(min(progress, 0.99)) // Cap at 99% until response received
     }
 }

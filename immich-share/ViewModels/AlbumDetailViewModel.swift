@@ -201,6 +201,16 @@ final class AlbumDetailViewModel: ObservableObject {
         return comp?.url
     }
 
+    /// Original full-resolution asset URL for downloading the original file
+    func originalURL(for asset: ImmichAsset) -> URL? {
+        var comp = URLComponents(string: album.baseURL)
+        comp?.path = "/api/assets/\(asset.id)/original"
+        comp?.queryItems = [
+            URLQueryItem(name: "key", value: album.shareKey)
+        ]
+        return comp?.url
+    }
+
     /// Preview/full asset URL (Immich viewAsset). Use thumbnailURL for reliability.
     func assetURL(for asset: ImmichAsset, size: String = "preview") -> URL? {
         var comp = URLComponents(string: album.baseURL)

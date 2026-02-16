@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct AddAlbumSheet: View {
     @Binding var isPresented: Bool
@@ -149,6 +150,8 @@ struct AddAlbumSheet: View {
             if let error = viewModel.errorMessage {
                 // Check if error indicates password is required
                 if isPasswordRequiredError(error) {
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.warning)
                     requiresPassword = true
                     localError = nil
                     viewModel.clearError()
@@ -160,6 +163,8 @@ struct AddAlbumSheet: View {
                     localError = error
                 }
             } else {
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
                 onAdded()
                 isPresented = false
             }

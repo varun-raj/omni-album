@@ -15,6 +15,7 @@ import ActivityKit
 struct UploadWidgetBundle: WidgetBundle {
     @WidgetBundleBuilder
     var body: some Widget {
+        RecentAlbumsWidget()
         if #available(iOS 16.2, *) {
             UploadLiveActivity()
         }

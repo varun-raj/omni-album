@@ -78,10 +78,17 @@ struct AssetLightboxView: View {
         return formatter.string(from: date)
     }
 
+    private var isCurrentAssetVideo: Bool {
+        guard let asset = currentAsset else { return false }
+        return viewModel.isVideo(asset)
+    }
+
     private var toastMessage: String {
         if showSaveSuccess { return "Saved to Photos" }
         if isSharing { return "Preparing to share…" }
-        if isSaving { return "Saving to Photos…" }
+        if isSaving {
+            return isCurrentAssetVideo ? "Saving video…" : "Saving to Photos…"
+        }
         return ""
     }
 
@@ -280,20 +287,22 @@ struct AssetLightboxView: View {
                 }
             }
 
-            Button {
-                saveCurrentPhoto()
-            } label: {
-                if isSaving {
-                    ProgressView()
-                        .frame(width: 44, height: 44)
-                } else {
-                    Image(systemName: "arrow.down.to.line")
-                        .font(.system(size: 18, weight: .medium))
-                        .frame(width: 44, height: 44)
-                        .background(.ultraThinMaterial, in: Circle())
+            if viewModel.allowDownload {
+                Button {
+                    saveCurrentPhoto()
+                } label: {
+                    if isSaving {
+                        ProgressView()
+                            .frame(width: 44, height: 44)
+                    } else {
+                        Image(systemName: isCurrentAssetVideo ? "arrow.down.circle" : "arrow.down.to.line")
+                            .font(.system(size: 18, weight: .medium))
+                            .frame(width: 44, height: 44)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
                 }
+                .disabled(isSaving)
             }
-            .disabled(isSaving)
         }
         .foregroundStyle(.primary)
         .padding(.vertical, 12)
@@ -356,6 +365,8 @@ struct AssetLightboxView: View {
 
                 if isVertical && shouldDismiss {
                     // Dismiss - animate image off screen in drag direction
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
                     isDismissing = true
                     let direction: CGFloat = value.translation.height > 0 ? 1 : -1
                     withAnimation(.easeOut(duration: 0.25)) {
@@ -403,20 +414,34 @@ struct AssetLightboxView: View {
         }
     }
 
-    // MARK: - Save Photo
+    // MARK: - Save Photo/Video
 
     private func saveCurrentPhoto() {
         guard let asset = currentAsset else { return }
-        let url = viewModel.previewURL(for: asset) ?? viewModel.thumbnailURL(for: asset)
-        guard let url = url else { return }
         isSaving = true
         saveError = nil
 
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
 
+        if viewModel.isVideo(asset) {
+            saveVideo(asset: asset)
+        } else {
+            saveImage(asset: asset)
+        }
+    }
+
+    private func saveImage(asset: ImmichAsset) {
+        // Try original first, fall back to preview
+        let url = viewModel.originalURL(for: asset)
+            ?? viewModel.previewURL(for: asset)
+            ?? viewModel.thumbnailURL(for: asset)
+        guard let url = url else {
+            isSaving = false
+            return
+        }
+
         Task {
-            // Use Kingfisher to retrieve (benefits from cache if available)
             let result = await withCheckedContinuation { continuation in
                 KingfisherManager.shared.retrieveImage(with: url) { result in
                     continuation.resume(returning: result)
@@ -430,19 +455,7 @@ struct AssetLightboxView: View {
                         PHAssetChangeRequest.creationRequestForAsset(from: value.image)
                     }
                     await MainActor.run {
-                        isSaving = false
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            showSaveSuccess = true
-                        }
-                        let successGenerator = UINotificationFeedbackGenerator()
-                        successGenerator.notificationOccurred(.success)
-
-                        // Auto-dismiss success toast after 2 seconds
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                showSaveSuccess = false
-                            }
-                        }
+                        showSaveSuccessToast()
                     }
                 } catch {
                     await MainActor.run {
@@ -450,11 +463,100 @@ struct AssetLightboxView: View {
                         saveError = error.localizedDescription
                     }
                 }
-            case .failure(let error):
+            case .failure:
+                // If original failed, try preview as fallback
+                if url == viewModel.originalURL(for: asset) {
+                    let fallbackURL = viewModel.previewURL(for: asset) ?? viewModel.thumbnailURL(for: asset)
+                    if let fallbackURL = fallbackURL {
+                        await saveImageFromURL(fallbackURL)
+                        return
+                    }
+                }
+                await MainActor.run {
+                    isSaving = false
+                    saveError = "Failed to download image."
+                }
+            }
+        }
+    }
+
+    private func saveImageFromURL(_ url: URL) async {
+        let result = await withCheckedContinuation { continuation in
+            KingfisherManager.shared.retrieveImage(with: url) { result in
+                continuation.resume(returning: result)
+            }
+        }
+
+        switch result {
+        case .success(let value):
+            do {
+                try await PHPhotoLibrary.shared().performChanges {
+                    PHAssetChangeRequest.creationRequestForAsset(from: value.image)
+                }
+                await MainActor.run {
+                    showSaveSuccessToast()
+                }
+            } catch {
                 await MainActor.run {
                     isSaving = false
                     saveError = error.localizedDescription
                 }
+            }
+        case .failure(let error):
+            await MainActor.run {
+                isSaving = false
+                saveError = error.localizedDescription
+            }
+        }
+    }
+
+    private func saveVideo(asset: ImmichAsset) {
+        guard let videoURL = viewModel.videoPlaybackURL(for: asset) else {
+            isSaving = false
+            saveError = "No video URL available."
+            return
+        }
+
+        Task {
+            do {
+                // Download video to a temp file
+                let (tempURL, _) = try await URLSession.shared.download(from: videoURL)
+                let tempDir = FileManager.default.temporaryDirectory
+                let videoFile = tempDir.appendingPathComponent(UUID().uuidString + ".mp4")
+
+                try FileManager.default.moveItem(at: tempURL, to: videoFile)
+
+                // Save to Photos
+                try await PHPhotoLibrary.shared().performChanges {
+                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: videoFile)
+                }
+
+                // Clean up temp file
+                try? FileManager.default.removeItem(at: videoFile)
+
+                await MainActor.run {
+                    showSaveSuccessToast()
+                }
+            } catch {
+                await MainActor.run {
+                    isSaving = false
+                    saveError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func showSaveSuccessToast() {
+        isSaving = false
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            showSaveSuccess = true
+        }
+        let successGenerator = UINotificationFeedbackGenerator()
+        successGenerator.notificationOccurred(.success)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                showSaveSuccess = false
             }
         }
     }
@@ -987,6 +1089,31 @@ struct ZoomablePhotoView: View {
 // MARK: - Share Helper
 
 enum ShareHelper {
+    @MainActor
+    static func share(items: [Any]) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
+
+            guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let rootVC = windowScene.windows.first?.rootViewController else {
+                return
+            }
+
+            var topVC = rootVC
+            while let presented = topVC.presentedViewController {
+                topVC = presented
+            }
+
+            if let popover = activityVC.popoverPresentationController {
+                popover.sourceView = topVC.view
+                popover.sourceRect = CGRect(x: topVC.view.bounds.midX, y: topVC.view.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
+
+            topVC.present(activityVC, animated: true)
+        }
+    }
+
     @MainActor
     static func share(image: UIImage) {
         // Small delay to let gesture system settle (helps avoid "gesture gate timed out" on simulator)

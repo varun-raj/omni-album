@@ -8,10 +8,36 @@
 
 /* Begin PBXBuildFile section */
 		8B226ED72F34450800F07346 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 8B226E012F3341A500F07346 /* Kingfisher */; };
+		8B226F0E2F34560100F07346 /* UploadWidgetExtension.appex in Embed Extensions */ = {isa = PBXBuildFile; fileRef = 8B226F012F34560100F07346 /* UploadWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8B226F0B2F34560100F07346 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8B226DD72F3341A300F07346 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8B226F022F34560100F07346;
+			remoteInfo = UploadWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		8B226F0D2F34560100F07346 /* Embed Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				8B226F0E2F34560100F07346 /* UploadWidgetExtension.appex in Embed Extensions */,
+			);
+			name = "Embed Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		8B226DDF2F3341A300F07346 /* immich-share.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "immich-share.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		8B226F012F34560100F07346 /* UploadWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = UploadWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -22,6 +48,13 @@
 			);
 			target = 8B226DDE2F3341A300F07346 /* immich-share */;
 		};
+		8B226F072F34560100F07346 /* Exceptions for "UploadWidgetExtension" folder in "UploadWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 8B226F022F34560100F07346 /* UploadWidgetExtension */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -31,6 +64,14 @@
 				8B226DEC2F3341A400F07346 /* Exceptions for "immich-share" folder in "immich-share" target */,
 			);
 			path = "immich-share";
+			sourceTree = "<group>";
+		};
+		8B226F062F34560100F07346 /* UploadWidgetExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				8B226F072F34560100F07346 /* Exceptions for "UploadWidgetExtension" folder in "UploadWidgetExtension" target */,
+			);
+			path = UploadWidgetExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -44,6 +85,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8B226F042F34560100F07346 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -51,6 +99,7 @@
 			isa = PBXGroup;
 			children = (
 				8B226DE12F3341A300F07346 /* immich-share */,
+				8B226F062F34560100F07346 /* UploadWidgetExtension */,
 				8B226DE02F3341A300F07346 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -59,6 +108,7 @@
 			isa = PBXGroup;
 			children = (
 				8B226DDF2F3341A300F07346 /* immich-share.app */,
+				8B226F012F34560100F07346 /* UploadWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,10 +123,12 @@
 				8B226DDB2F3341A300F07346 /* Sources */,
 				8B226DDC2F3341A300F07346 /* Frameworks */,
 				8B226DDD2F3341A300F07346 /* Resources */,
+				8B226F0D2F34560100F07346 /* Embed Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				8B226F0C2F34560100F07346 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				8B226DE12F3341A300F07346 /* immich-share */,
@@ -89,6 +141,26 @@
 			productReference = 8B226DDF2F3341A300F07346 /* immich-share.app */;
 			productType = "com.apple.product-type.application";
 		};
+		8B226F022F34560100F07346 /* UploadWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8B226F0A2F34560100F07346 /* Build configuration list for PBXNativeTarget "UploadWidgetExtension" */;
+			buildPhases = (
+				8B226F032F34560100F07346 /* Sources */,
+				8B226F042F34560100F07346 /* Frameworks */,
+				8B226F052F34560100F07346 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				8B226F062F34560100F07346 /* UploadWidgetExtension */,
+			);
+			name = UploadWidgetExtension;
+			productName = UploadWidgetExtension;
+			productReference = 8B226F012F34560100F07346 /* UploadWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -100,6 +172,9 @@
 				LastUpgradeCheck = 2610;
 				TargetAttributes = {
 					8B226DDE2F3341A300F07346 = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
+					8B226F022F34560100F07346 = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
 				};
@@ -122,12 +197,20 @@
 			projectRoot = "";
 			targets = (
 				8B226DDE2F3341A300F07346 /* immich-share */,
+				8B226F022F34560100F07346 /* UploadWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		8B226DDD2F3341A300F07346 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8B226F052F34560100F07346 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -144,7 +227,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8B226F032F34560100F07346 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8B226F0C2F34560100F07346 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8B226F022F34560100F07346 /* UploadWidgetExtension */;
+			targetProxy = 8B226F0B2F34560100F07346 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		8B226DEE2F3341A400F07346 /* Debug */ = {
@@ -338,6 +436,60 @@
 			};
 			name = Release;
 		};
+		8B226F082F34560100F07346 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8HQA2YC4EH;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = UploadWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Upload Progress";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.skcript.immich-share.UploadWidgetExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		8B226F092F34560100F07346 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8HQA2YC4EH;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = UploadWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Upload Progress";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.skcript.immich-share.UploadWidgetExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -355,6 +507,15 @@
 			buildConfigurations = (
 				8B226DEE2F3341A400F07346 /* Debug */,
 				8B226DEF2F3341A400F07346 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8B226F0A2F34560100F07346 /* Build configuration list for PBXNativeTarget "UploadWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8B226F082F34560100F07346 /* Debug */,
+				8B226F092F34560100F07346 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

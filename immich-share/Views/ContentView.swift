@@ -17,10 +17,17 @@ struct ContentView: View {
     @State private var showAddSheet = false
     @State private var searchText = ""
     @AppStorage("albumViewMode") private var viewMode: AlbumViewMode = .grid
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private static let gridSpacing: CGFloat = 16
     private static let gridPadding: CGFloat = 16
     private static let albumCornerRadius: CGFloat = 12
+
+    /// Adaptive column count based on size class
+    private var albumGridColumns: [GridItem] {
+        let count = horizontalSizeClass == .regular ? 4 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: Self.gridSpacing), count: count)
+    }
 
     /// Filtered albums based on search text
     private var filteredAlbums: [DisplayAlbum] {
@@ -107,10 +114,13 @@ struct ContentView: View {
             switch viewMode {
             case .grid:
                 gridView
+                    .transition(.move(edge: .leading).combined(with: .opacity))
             case .list:
                 listView
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
+        .animation(.easeInOut(duration: 0.3), value: viewMode)
         .navigationDestination(for: DisplayAlbum.self) { album in
             AlbumDetailView(album: album)
         }
@@ -121,10 +131,7 @@ struct ContentView: View {
             if filteredAlbums.isEmpty && !searchText.isEmpty {
                 noSearchResultsView
             } else {
-                LazyVGrid(columns: [
-                    GridItem(.flexible(), spacing: Self.gridSpacing),
-                    GridItem(.flexible(), spacing: Self.gridSpacing)
-                ], spacing: Self.gridSpacing) {
+                LazyVGrid(columns: albumGridColumns, spacing: Self.gridSpacing) {
                     ForEach(filteredAlbums) { album in
                         NavigationLink(value: album) {
                             AlbumGridCell(album: album, cornerRadius: Self.albumCornerRadius)
@@ -136,6 +143,9 @@ struct ContentView: View {
             }
         }
         .scrollIndicators(.hidden)
+        .refreshable {
+            await viewModel.refresh()
+        }
     }
 
     private var listView: some View {
@@ -161,6 +171,9 @@ struct ContentView: View {
             }
         }
         .listStyle(.plain)
+        .refreshable {
+            await viewModel.refresh()
+        }
     }
 
     private var noSearchResultsView: some View {

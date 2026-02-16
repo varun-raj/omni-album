@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import SwiftUI
+import WidgetKit
 
 extension Notification.Name {
     static let albumDataUpdated = Notification.Name("albumDataUpdated")
@@ -66,6 +67,7 @@ final class AggregatorViewModel: ObservableObject {
     private let shareService = ImmichShareService()
     private let cloudKitService = CloudKitAlbumsService()
     private let localService = LocalAlbumsService()
+    private let spotlightService = SpotlightService.shared
     private var cancellables = Set<AnyCancellable>()
 
     /// Check if iCloud sync is enabled
@@ -103,6 +105,12 @@ final class AggregatorViewModel: ObservableObject {
 
         albums = localAlbums
         isLoading = false
+
+        // Index albums in Spotlight
+        spotlightService.indexAlbums(localAlbums)
+
+        // Update widget data
+        updateWidgetData(localAlbums)
 
         // Then sync with CloudKit
         await syncWithCloudKit()
@@ -165,6 +173,12 @@ final class AggregatorViewModel: ObservableObject {
             if merged.map({ $0.id }) != albums.map({ $0.id }) {
                 albums = merged
             }
+
+            // Re-index in Spotlight after sync
+            spotlightService.indexAlbums(albums)
+
+            // Update widget data
+            updateWidgetData(albums)
 
             errorMessage = nil
         } catch {
@@ -233,6 +247,12 @@ final class AggregatorViewModel: ObservableObject {
             localService.addAlbum(display)
             albums.insert(display, at: 0)
 
+            // Index in Spotlight
+            spotlightService.indexAlbum(display)
+
+            // Update widget data
+            updateWidgetData(albums)
+
             // Then save to CloudKit (background) if enabled
             if iCloudSyncEnabled {
                 Task {
@@ -255,6 +275,12 @@ final class AggregatorViewModel: ObservableObject {
         localService.deleteAlbum(id: album.id)
         albums.removeAll { $0.id == album.id }
 
+        // Remove from Spotlight
+        spotlightService.deindexAlbum(albumId: album.albumId)
+
+        // Update widget data
+        updateWidgetData(albums)
+
         // Then remove from CloudKit (background) if enabled
         if iCloudSyncEnabled {
             Task {
@@ -270,5 +296,11 @@ final class AggregatorViewModel: ObservableObject {
 
     func clearError() {
         errorMessage = nil
+    }
+
+    /// Update shared widget data and reload timelines
+    private func updateWidgetData(_ albums: [DisplayAlbum]) {
+        SharedAlbumData.saveAlbums(albums)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }

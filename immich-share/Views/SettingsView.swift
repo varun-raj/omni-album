@@ -13,12 +13,14 @@ import UniformTypeIdentifiers
 
 enum SettingsKeys {
     static let iCloudSyncEnabled = "iCloudSyncEnabled"
+    static let wifiOnlyUpload = "wifiOnlyUpload"
 }
 
 // MARK: - Settings View
 
 struct SettingsView: View {
     @AppStorage(SettingsKeys.iCloudSyncEnabled) private var iCloudSyncEnabled = true
+    @AppStorage(SettingsKeys.wifiOnlyUpload) private var wifiOnlyUpload = false
     @ObservedObject private var uploadService = UploadQueueService.shared
 
     @State private var showingExportSheet = false
@@ -37,10 +39,13 @@ struct SettingsView: View {
                     Toggle(isOn: $iCloudSyncEnabled) {
                         Label("iCloud Sync", systemImage: "icloud")
                     }
+                    Toggle(isOn: $wifiOnlyUpload) {
+                        Label("Wi-Fi Only Uploads", systemImage: "wifi")
+                    }
                 } header: {
                     Text("Sync")
                 } footer: {
-                    Text("Sync your album list across all your devices using iCloud.")
+                    Text("Sync your album list across all your devices using iCloud. Wi-Fi only uploads will pause uploads when on cellular data.")
                 }
 
                 // Storage Section
