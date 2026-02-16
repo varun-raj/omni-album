@@ -15,6 +15,7 @@ struct SharedAlbumEntry: Codable {
     let shareKey: String
     let thumbnailAssetId: String?
     let assetCount: Int?
+    let provider: String?  // Defaults to "immich" for backward compat
 }
 
 enum SharedAlbumData {
@@ -30,7 +31,8 @@ enum SharedAlbumData {
                 baseURL: album.baseURL,
                 shareKey: album.shareKey,
                 thumbnailAssetId: album.albumThumbnailAssetId,
-                assetCount: album.assetCount
+                assetCount: album.assetCount,
+                provider: album.provider.rawValue
             )
         }
 
@@ -53,9 +55,10 @@ enum SharedAlbumData {
     /// Build a thumbnail URL for a shared album entry
     static func thumbnailURL(for entry: SharedAlbumEntry) -> URL? {
         guard let assetId = entry.thumbnailAssetId, !assetId.isEmpty else { return nil }
-        var comp = URLComponents(string: entry.baseURL)
-        comp?.path = "/api/assets/\(assetId)/thumbnail"
-        comp?.queryItems = [URLQueryItem(name: "key", value: entry.shareKey)]
-        return comp?.url
+        let providerType = PhotoProvider(rawValue: entry.provider ?? "immich") ?? .immich
+        if let provider = ProviderRegistry.shared.provider(for: providerType) {
+            return provider.thumbnailURL(baseURL: entry.baseURL, assetId: assetId, shareKey: entry.shareKey)
+        }
+        return nil
     }
 }

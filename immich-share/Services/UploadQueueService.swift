@@ -26,7 +26,6 @@ final class UploadQueueService: ObservableObject {
     @Published private(set) var isWaitingForWiFi = false
 
     private let persistenceService = UploadQueuePersistenceService()
-    private let uploadService = ImmichUploadService()
     private var processingTask: Task<Void, Never>?
     private let networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "com.skcript.immich-share.uploadnetwork")
@@ -230,7 +229,16 @@ final class UploadQueueService: ObservableObject {
 
             do {
                 let currentTask = queue[nextIndex]
-                let assetId = try await uploadService.uploadAsset(
+                let providerType = PhotoProvider(rawValue: currentTask.provider) ?? .immich
+                guard let taskProvider = ProviderRegistry.shared.provider(for: providerType) else {
+                    queue[nextIndex].status = .failed
+                    queue[nextIndex].errorMessage = "Unknown provider: \(currentTask.provider)"
+                    queue[nextIndex].completedAt = Date()
+                    activeUpload = nil
+                    persistQueue()
+                    continue
+                }
+                let assetId = try await taskProvider.uploadAsset(
                     task: currentTask
                 ) { [weak self] progress in
                     Task { @MainActor in

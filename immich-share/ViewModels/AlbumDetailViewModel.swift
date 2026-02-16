@@ -10,14 +10,14 @@ import Combine
 
 @MainActor
 final class AlbumDetailViewModel: ObservableObject {
-    @Published private(set) var assets: [ImmichAsset] = []
+    @Published private(set) var assets: [Asset] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isRefreshing = false
     @Published private(set) var errorMessage: String?
-    @Published private(set) var albumDetails: AlbumWithAssetsResponse?
+    @Published private(set) var albumDetails: AlbumDetail?
     @Published private(set) var dateRangeText: String?
 
-    private let shareService = ImmichShareService()
+    private let provider: any ShareLinkProvider
     let album: DisplayAlbum
 
     /// Shared instance cache for refreshing after upload
@@ -25,6 +25,8 @@ final class AlbumDetailViewModel: ObservableObject {
 
     init(album: DisplayAlbum) {
         self.album = album
+        self.provider = ProviderRegistry.shared.provider(for: album.provider)
+            ?? ProviderRegistry.shared.provider(for: .immich)!
         // Register this instance for later refresh
         Self.instances[album.albumId] = WeakRef(self)
     }
@@ -36,7 +38,7 @@ final class AlbumDetailViewModel: ObservableObject {
 
     /// Computes date range text from assets (e.g., "Jan 2024" or "Jan - Mar 2024")
     /// Called once after assets are loaded, off main thread
-    nonisolated private func computeDateRangeText(from assets: [ImmichAsset]) -> String? {
+    nonisolated private func computeDateRangeText(from assets: [Asset]) -> String? {
         guard !assets.isEmpty else { return nil }
 
         let isoFormatter = ISO8601DateFormatter()
@@ -44,7 +46,7 @@ final class AlbumDetailViewModel: ObservableObject {
         let fallbackFormatter = ISO8601DateFormatter()
 
         let dates = assets.compactMap { asset -> Date? in
-            let dateString = asset.fileCreatedAt ?? asset.localDateTime ?? asset.createdAt ?? ""
+            let dateString = asset.createdAt ?? ""
             guard !dateString.isEmpty else { return nil }
             return isoFormatter.date(from: dateString)
                 ?? fallbackFormatter.date(from: dateString)
@@ -85,7 +87,7 @@ final class AlbumDetailViewModel: ObservableObject {
 
     /// Owner name from the album details
     var ownerName: String? {
-        albumDetails?.owner.name
+        albumDetails?.ownerName
     }
 
     /// Album description from the album details
@@ -112,13 +114,20 @@ final class AlbumDetailViewModel: ObservableObject {
     /// High-quality cover image URL for the album header
     var coverImageURL: URL? {
         guard let thumbnailId = album.albumThumbnailAssetId, !thumbnailId.isEmpty else { return nil }
-        var comp = URLComponents(string: album.baseURL)
-        comp?.path = "/api/assets/\(thumbnailId)/thumbnail"
-        comp?.queryItems = [
-            URLQueryItem(name: "key", value: album.shareKey),
-            URLQueryItem(name: "size", value: "preview")
-        ]
-        return comp?.url
+        // Use a dummy asset to get a preview-sized URL, or build directly via thumbnail
+        // For the cover, we use the thumbnail endpoint with preview size
+        return provider.thumbnailURL(baseURL: album.baseURL, assetId: thumbnailId, shareKey: album.shareKey)
+    }
+
+    /// Cover image URL at preview quality (higher res than thumbnail)
+    var coverPreviewURL: URL? {
+        guard let thumbnailId = album.albumThumbnailAssetId, !thumbnailId.isEmpty else { return nil }
+        let dummyAsset = Asset(
+            id: thumbnailId, type: .image, originalFileName: "",
+            createdAt: nil, duration: nil, thumbhash: nil,
+            width: nil, height: nil, exif: nil, providerData: nil
+        )
+        return provider.previewURL(baseURL: album.baseURL, asset: dummyAsset, shareKey: album.shareKey)
     }
 
     func loadIfNeeded() async {
@@ -146,14 +155,14 @@ final class AlbumDetailViewModel: ObservableObject {
 
     private func fetchAlbumData() async {
         do {
-            let response = try await shareService.fetchAlbumWithAssets(
+            let detail = try await provider.fetchAlbumDetail(
                 baseURL: album.baseURL,
                 albumId: album.albumId,
                 shareKey: album.shareKey,
                 password: album.password
             )
-            albumDetails = response
-            assets = response.assets
+            albumDetails = detail
+            assets = detail.assets
             errorMessage = nil
 
             // Notify album list to update its data
@@ -162,13 +171,13 @@ final class AlbumDetailViewModel: ObservableObject {
                 object: nil,
                 userInfo: [
                     "albumId": album.albumId,
-                    "assetCount": response.assetCount,
-                    "thumbnailId": response.albumThumbnailAssetId as Any
+                    "assetCount": detail.assetCount,
+                    "thumbnailId": detail.thumbnailAssetId as Any
                 ]
             )
 
             // Compute date range off main thread after UI updates
-            let loadedAssets = response.assets
+            let loadedAssets = detail.assets
             let computedDateRange = await Task.detached { [weak self] in
                 self?.computeDateRangeText(from: loadedAssets)
             }.value
@@ -181,63 +190,28 @@ final class AlbumDetailViewModel: ObservableObject {
         }
     }
 
-    func thumbnailURL(for asset: ImmichAsset) -> URL? {
-        AggregatorViewModel.thumbnailURL(
-            baseURL: album.baseURL,
-            assetId: asset.id,
-            shareKey: album.shareKey
-        )
+    func thumbnailURL(for asset: Asset) -> URL? {
+        provider.thumbnailURL(baseURL: album.baseURL, assetId: asset.id, shareKey: album.shareKey)
     }
 
-    /// High-res preview URL for lightbox: same path as thumbnail with size=preview and edited=true.
-    func previewURL(for asset: ImmichAsset) -> URL? {
-        var comp = URLComponents(string: album.baseURL)
-        comp?.path = "/api/assets/\(asset.id)/thumbnail"
-        comp?.queryItems = [
-            URLQueryItem(name: "key", value: album.shareKey),
-            URLQueryItem(name: "size", value: "preview"),
-            URLQueryItem(name: "edited", value: "true")
-        ]
-        return comp?.url
+    /// High-res preview URL for lightbox
+    func previewURL(for asset: Asset) -> URL? {
+        provider.previewURL(baseURL: album.baseURL, asset: asset, shareKey: album.shareKey)
     }
 
-    /// Original full-resolution asset URL for downloading the original file
-    func originalURL(for asset: ImmichAsset) -> URL? {
-        var comp = URLComponents(string: album.baseURL)
-        comp?.path = "/api/assets/\(asset.id)/original"
-        comp?.queryItems = [
-            URLQueryItem(name: "key", value: album.shareKey)
-        ]
-        return comp?.url
-    }
-
-    /// Preview/full asset URL (Immich viewAsset). Use thumbnailURL for reliability.
-    func assetURL(for asset: ImmichAsset, size: String = "preview") -> URL? {
-        var comp = URLComponents(string: album.baseURL)
-        comp?.path = "/api/assets/\(asset.id)"
-        comp?.queryItems = [
-            URLQueryItem(name: "key", value: album.shareKey),
-            URLQueryItem(name: "size", value: size)
-        ]
-        return comp?.url
+    /// Original full-resolution asset URL for downloading
+    func originalURL(for asset: Asset) -> URL? {
+        provider.originalURL(baseURL: album.baseURL, asset: asset, shareKey: album.shareKey)
     }
 
     /// Video playback URL for streaming videos
-    func videoPlaybackURL(for asset: ImmichAsset) -> URL? {
-        guard asset.type.lowercased() == "video" else { return nil }
-        var comp = URLComponents(string: album.baseURL)
-        comp?.path = "/api/assets/\(asset.id)/video/playback"
-        var queryItems = [URLQueryItem(name: "key", value: album.shareKey)]
-        if let checksum = asset.checksum {
-            queryItems.append(URLQueryItem(name: "c", value: checksum))
-        }
-        comp?.queryItems = queryItems
-        return comp?.url
+    func videoPlaybackURL(for asset: Asset) -> URL? {
+        provider.videoPlaybackURL(baseURL: album.baseURL, asset: asset, shareKey: album.shareKey)
     }
 
     /// Check if asset is a video
-    func isVideo(_ asset: ImmichAsset) -> Bool {
-        asset.type.lowercased() == "video"
+    func isVideo(_ asset: Asset) -> Bool {
+        asset.type == .video
     }
 }
 
@@ -249,4 +223,3 @@ private class WeakRef<T: AnyObject> {
         self.value = value
     }
 }
-

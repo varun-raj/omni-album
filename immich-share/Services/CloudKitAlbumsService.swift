@@ -65,6 +65,7 @@ final class CloudKitAlbumsService {
         record["allowDownload"] = album.allowDownload ? 1 : 0
         record["showMetadata"] = album.showMetadata ? 1 : 0
         record["password"] = album.password  // Stored in private CloudKit database
+        record["provider"] = album.provider.rawValue
 
         do {
             _ = try await database.save(record)
@@ -123,7 +124,8 @@ final class CloudKitAlbumsService {
             allowUpload: (record["allowUpload"] as? Int ?? 0) == 1,
             allowDownload: (record["allowDownload"] as? Int ?? 1) == 1,  // Default true
             showMetadata: (record["showMetadata"] as? Int ?? 1) == 1,    // Default true
-            password: record["password"] as? String
+            password: record["password"] as? String,
+            provider: PhotoProvider(rawValue: record["provider"] as? String ?? "immich") ?? .immich
         )
     }
 }

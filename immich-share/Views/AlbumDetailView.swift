@@ -219,16 +219,12 @@ struct AlbumDetailView: View {
 
         return ZStack(alignment: .bottomLeading) {
             // Hero image with parallax (high quality preview)
-            if let coverURL = viewModel.coverImageURL {
+            if let coverURL = viewModel.coverPreviewURL ?? viewModel.coverImageURL {
                 KFImage(coverURL)
                     .placeholder {
                         // Show thumbnail as placeholder while loading high-res
-                        if let thumbnailId = album.albumThumbnailAssetId {
-                            KFImage(AggregatorViewModel.thumbnailURL(
-                                baseURL: album.baseURL,
-                                assetId: thumbnailId,
-                                shareKey: album.shareKey
-                            ))
+                        if let thumbnailURL = AggregatorViewModel.thumbnailURL(for: album) {
+                            KFImage(thumbnailURL)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                         } else {
@@ -371,7 +367,7 @@ struct AlbumDetailView: View {
                 } label: {
                     PhotoGridCell(
                         url: viewModel.thumbnailURL(for: asset),
-                        isVideo: asset.type.lowercased() == "video",
+                        isVideo: asset.type == .video,
                         duration: asset.duration
                     )
                 }
@@ -549,16 +545,19 @@ private struct AlbumInfoSheet: View {
                 }
 
                 // Owner
-                if let details = viewModel.albumDetails {
+                if let details = viewModel.albumDetails, details.ownerName != nil {
                     Section("Shared By") {
                         HStack(spacing: 12) {
-                            ownerAvatar(for: details.owner)
+                            ownerAvatar(
+                                name: details.ownerName,
+                                avatarColor: details.ownerAvatarColor
+                            )
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(details.owner.name ?? "Unknown")
+                                Text(details.ownerName ?? "Unknown")
                                     .font(.body.weight(.medium))
 
-                                if let email = details.owner.email {
+                                if let email = details.ownerEmail {
                                     Text(email)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
@@ -621,26 +620,27 @@ private struct AlbumInfoSheet: View {
                 }
 
                 // Album users (if any)
-                if let details = viewModel.albumDetails, !details.albumUsers.isEmpty {
+                if let details = viewModel.albumDetails, !details.sharedUsers.isEmpty {
                     Section("Shared With") {
-                        ForEach(details.albumUsers, id: \.user?.id) { albumUser in
-                            if let user = albumUser.user {
-                                HStack(spacing: 12) {
-                                    ownerAvatar(for: user)
+                        ForEach(details.sharedUsers, id: \.id) { sharedUser in
+                            HStack(spacing: 12) {
+                                ownerAvatar(
+                                    name: sharedUser.name,
+                                    avatarColor: sharedUser.avatarColor
+                                )
 
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(user.name ?? "Unknown")
-                                            .font(.body.weight(.medium))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(sharedUser.name ?? "Unknown")
+                                        .font(.body.weight(.medium))
 
-                                        if let role = albumUser.role {
-                                            Text(role.capitalized)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
+                                    if let role = sharedUser.role {
+                                        Text(role.capitalized)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
                                     }
                                 }
-                                .padding(.vertical, 2)
                             }
+                            .padding(.vertical, 2)
                         }
                     }
                 }
@@ -659,9 +659,9 @@ private struct AlbumInfoSheet: View {
     }
 
     @ViewBuilder
-    private func ownerAvatar(for owner: AlbumOwner) -> some View {
-        let color = avatarColor(from: owner.avatarColor)
-        let initials = ownerInitials(owner.name)
+    private func ownerAvatar(name: String?, avatarColor colorString: String?) -> some View {
+        let color = avatarColor(from: colorString)
+        let initials = ownerInitials(name)
 
         Circle()
             .fill(color.gradient)

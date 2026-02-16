@@ -26,6 +26,7 @@ struct DisplayAlbum: Identifiable, Hashable, Sendable {
     let allowDownload: Bool
     let showMetadata: Bool
     let password: String?
+    let provider: PhotoProvider
 
     init(
         id: String,
@@ -38,7 +39,8 @@ struct DisplayAlbum: Identifiable, Hashable, Sendable {
         allowUpload: Bool = false,
         allowDownload: Bool = true,
         showMetadata: Bool = true,
-        password: String? = nil
+        password: String? = nil,
+        provider: PhotoProvider = .immich
     ) {
         self.id = id
         self.albumName = albumName
@@ -51,6 +53,7 @@ struct DisplayAlbum: Identifiable, Hashable, Sendable {
         self.allowDownload = allowDownload
         self.showMetadata = showMetadata
         self.password = password
+        self.provider = provider
     }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -64,7 +67,6 @@ final class AggregatorViewModel: ObservableObject {
     @Published private(set) var isSyncing = false
     @Published private(set) var errorMessage: String?
 
-    private let shareService = ImmichShareService()
     private let cloudKitService = CloudKitAlbumsService()
     private let localService = LocalAlbumsService()
     private let spotlightService = SpotlightService.shared
@@ -132,7 +134,8 @@ final class AggregatorViewModel: ObservableObject {
             allowUpload: oldAlbum.allowUpload,
             allowDownload: oldAlbum.allowDownload,
             showMetadata: oldAlbum.showMetadata,
-            password: oldAlbum.password
+            password: oldAlbum.password,
+            provider: oldAlbum.provider
         )
 
         albums[index] = updatedAlbum
@@ -198,43 +201,43 @@ final class AggregatorViewModel: ObservableObject {
         await syncWithCloudKit()
     }
 
-    /// Thumbnail URL for an asset when using share key (public).
-    static func thumbnailURL(baseURL: String, assetId: String, shareKey: String) -> URL? {
-        var comp = URLComponents(string: baseURL)
-        comp?.path = "/api/assets/\(assetId)/thumbnail"
-        comp?.queryItems = [URLQueryItem(name: "key", value: shareKey)]
-        return comp?.url
+    /// Thumbnail URL for an album's cover image, resolved via its provider
+    static func thumbnailURL(for album: DisplayAlbum) -> URL? {
+        guard let assetId = album.albumThumbnailAssetId, !assetId.isEmpty else { return nil }
+        guard let provider = ProviderRegistry.shared.provider(for: album.provider) else { return nil }
+        return provider.thumbnailURL(baseURL: album.baseURL, assetId: assetId, shareKey: album.shareKey)
     }
 
-    func addAlbum(shareLinkURL: String, password: String? = nil) async {
+    func addAlbum(shareLinkURL: String, provider providerType: PhotoProvider, password: String? = nil) async {
         errorMessage = nil
         isLoading = true
         defer { isLoading = false }
         do {
-            let parsed = try ImmichShareLink.parse(shareLinkURL)
-            let response = try await shareService.fetchSharedLink(
+            guard let provider = ProviderRegistry.shared.provider(for: providerType) else {
+                errorMessage = "Unsupported provider."
+                return
+            }
+            let parsed = try provider.parseShareLink(shareLinkURL)
+            let info = try await provider.fetchSharedLinkInfo(
                 baseURL: parsed.baseURL,
                 key: parsed.key,
                 slug: parsed.slug,
                 token: parsed.token,
                 password: password
             )
-            guard let album = response.album else {
-                errorMessage = "This share link has no album."
-                return
-            }
             let display = DisplayAlbum(
-                id: response.id,
-                albumName: album.albumName,
-                albumThumbnailAssetId: album.albumThumbnailAssetId,
+                id: info.linkId,
+                albumName: info.albumName,
+                albumThumbnailAssetId: info.thumbnailAssetId,
                 baseURL: parsed.baseURL,
-                shareKey: response.key,
-                albumId: album.id,
-                assetCount: album.assetCount,
-                allowUpload: response.allowUpload,
-                allowDownload: response.allowDownload,
-                showMetadata: response.showMetadata,
-                password: password
+                shareKey: info.shareKey,
+                albumId: info.albumId,
+                assetCount: info.assetCount,
+                allowUpload: info.allowUpload,
+                allowDownload: info.allowDownload,
+                showMetadata: info.showMetadata,
+                password: password,
+                provider: provider.providerType
             )
 
             // Check for duplicates

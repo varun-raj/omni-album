@@ -382,7 +382,8 @@ struct UploadQueueSheet: View {
                 password: album.password,
                 localAssetIdentifier: asset.localIdentifier,
                 fileName: asset.fileName,
-                fileSize: asset.fileSize
+                fileSize: asset.fileSize,
+                provider: album.provider.rawValue
             )
             tasks.append(task)
         }

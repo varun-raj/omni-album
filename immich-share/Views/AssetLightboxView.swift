@@ -16,7 +16,7 @@ import AVKit
 import Kingfisher
 
 struct AssetLightboxView: View {
-    let assets: [ImmichAsset]
+    let assets: [Asset]
     let selectedIndex: Int
     let viewModel: AlbumDetailViewModel
     let onDismiss: () -> Void
@@ -31,7 +31,7 @@ struct AssetLightboxView: View {
     @State private var dragOffset: CGFloat = 0
     @State private var isDismissing = false
 
-    init(assets: [ImmichAsset], selectedIndex: Int, viewModel: AlbumDetailViewModel, onDismiss: @escaping () -> Void) {
+    init(assets: [Asset], selectedIndex: Int, viewModel: AlbumDetailViewModel, onDismiss: @escaping () -> Void) {
         self.assets = assets
         self.selectedIndex = selectedIndex
         self.viewModel = viewModel
@@ -39,7 +39,7 @@ struct AssetLightboxView: View {
         _currentIndex = State(initialValue: selectedIndex)
     }
 
-    private var currentAsset: ImmichAsset? {
+    private var currentAsset: Asset? {
         guard currentIndex >= 0, currentIndex < assets.count else { return nil }
         return assets[currentIndex]
     }
@@ -47,7 +47,7 @@ struct AssetLightboxView: View {
     private var titleText: String {
         guard let asset = currentAsset else { return "" }
         // Try to get location or just show filename
-        if let exif = asset.exifInfo {
+        if let exif = asset.exif {
             var parts: [String] = []
             if let city = exif.city, !city.isEmpty { parts.append(city) }
             if let state = exif.state, !state.isEmpty { parts.append(state) }
@@ -58,7 +58,7 @@ struct AssetLightboxView: View {
 
     private var subtitleText: String {
         guard let asset = currentAsset else { return "" }
-        let dateStr = asset.fileCreatedAt ?? asset.localDateTime ?? ""
+        let dateStr = asset.createdAt ?? ""
         guard !dateStr.isEmpty else { return "" }
 
         let isoFormatter = ISO8601DateFormatter()
@@ -436,7 +436,7 @@ struct AssetLightboxView: View {
         }
     }
 
-    private func saveImage(asset: ImmichAsset) {
+    private func saveImage(asset: Asset) {
         // Try original first, fall back to preview
         let url = viewModel.originalURL(for: asset)
             ?? viewModel.previewURL(for: asset)
@@ -515,7 +515,7 @@ struct AssetLightboxView: View {
         }
     }
 
-    private func saveVideo(asset: ImmichAsset) {
+    private func saveVideo(asset: Asset) {
         guard let videoURL = viewModel.videoPlaybackURL(for: asset) else {
             isSaving = false
             saveError = "No video URL available."
@@ -570,7 +570,7 @@ struct AssetLightboxView: View {
 // MARK: - Asset Page View (Photo or Video)
 
 private struct PhotoPageView: View {
-    let asset: ImmichAsset
+    let asset: Asset
     let viewModel: AlbumDetailViewModel
     let onTap: () -> Void
 
@@ -777,13 +777,13 @@ private struct ThumbnailCell: View {
 
 // MARK: - Asset Details Sheet (clean info panel)
 struct AssetDetailsSheet: View {
-    let asset: ImmichAsset
+    let asset: Asset
     let viewModel: AlbumDetailViewModel
 
     @Environment(\.dismiss) private var dismiss
 
     private var dateTimeFormatted: String? {
-        let s = asset.fileCreatedAt ?? asset.localDateTime ?? ""
+        let s = asset.createdAt ?? ""
         guard !s.isEmpty else { return nil }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -797,7 +797,7 @@ struct AssetDetailsSheet: View {
     }
 
     private var formatPill: String {
-        let mime = asset.originalMimeType ?? asset.type
+        let mime = asset.providerData?["originalMimeType"] ?? (asset.type == .video ? "video" : "image")
         if mime.uppercased().contains("HEIF") || mime.uppercased().contains("HEIC") { return "HEIF" }
         if mime.uppercased().contains("JPEG") || mime.uppercased().contains("JPG") { return "JPEG" }
         if mime.uppercased().contains("PNG") { return "PNG" }
@@ -806,7 +806,7 @@ struct AssetDetailsSheet: View {
     }
 
     private var deviceLine: String? {
-        guard let exif = asset.exifInfo else { return nil }
+        guard let exif = asset.exif else { return nil }
         let make = exif.make ?? ""
         let model = exif.model ?? ""
         if make.isEmpty && model.isEmpty { return nil }
@@ -818,7 +818,7 @@ struct AssetDetailsSheet: View {
     }
 
     private var cameraSettingsLine: String? {
-        guard let exif = asset.exifInfo else { return nil }
+        guard let exif = asset.exif else { return nil }
         var parts: [String] = []
         if let focal = exif.focalLength { parts.append(String(format: "%.0fmm", focal)) }
         if let f = exif.fNumber { parts.append(String(format: "ƒ/%.1f", f)) }
@@ -828,20 +828,22 @@ struct AssetDetailsSheet: View {
     }
 
     private var dimensionsLine: String? {
-        guard let w = asset.width, let h = asset.height else { return nil }
+        let w = asset.exif?.width ?? asset.width
+        let h = asset.exif?.height ?? asset.height
+        guard let w, let h else { return nil }
         let mp = Double(w * h) / 1_000_000
         return String(format: "%.1f MP • %d × %d", mp, w, h)
     }
 
     private var fileSizeLine: String? {
-        guard let size = asset.exifInfo?.fileSizeInByte else { return nil }
+        guard let size = asset.exif?.fileSizeInBytes else { return nil }
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         return formatter.string(fromByteCount: size)
     }
 
     private var locationText: String? {
-        guard let exif = asset.exifInfo else { return nil }
+        guard let exif = asset.exif else { return nil }
         var parts: [String] = []
         if let city = exif.city, !city.isEmpty { parts.append(city) }
         if let state = exif.state, !state.isEmpty { parts.append(state) }
@@ -915,7 +917,7 @@ struct AssetDetailsSheet: View {
                     }
 
                     // Location
-                    if let exif = asset.exifInfo, let lat = exif.latitude, let lon = exif.longitude {
+                    if let exif = asset.exif, let lat = exif.latitude, let lon = exif.longitude {
                         VStack(alignment: .leading, spacing: 8) {
                             Label("Location", systemImage: "location")
                                 .font(.caption)

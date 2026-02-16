@@ -99,7 +99,7 @@ struct ContentView: View {
         ContentUnavailableView {
             Label("No Albums", systemImage: "photo.on.rectangle.angled")
         } description: {
-            Text("Add an Immich share link to see albums here.")
+            Text("Add a share link to see albums here.")
         } actions: {
             Button("Add Share Link") {
                 showAddSheet = true
@@ -214,17 +214,13 @@ struct AlbumGridCell: View {
 
     @ViewBuilder
     private var thumbnailView: some View {
-        let url = AggregatorViewModel.thumbnailURL(
-            baseURL: album.baseURL,
-            assetId: album.albumThumbnailAssetId ?? "",
-            shareKey: album.shareKey
-        )
+        let url = AggregatorViewModel.thumbnailURL(for: album)
         Color.clear
             .frame(maxWidth: .infinity)
             .aspectRatio(1, contentMode: .fit)
             .overlay {
                 Group {
-                    if let url = url, !(album.albumThumbnailAssetId ?? "").isEmpty {
+                    if let url = url {
                         CachedAsyncImage(url: url)
                     } else {
                         placeholderImage
@@ -323,13 +319,9 @@ struct AlbumListCell: View {
 
     @ViewBuilder
     private var thumbnailView: some View {
-        let url = AggregatorViewModel.thumbnailURL(
-            baseURL: album.baseURL,
-            assetId: album.albumThumbnailAssetId ?? "",
-            shareKey: album.shareKey
-        )
+        let url = AggregatorViewModel.thumbnailURL(for: album)
 
-        if let url = url, !(album.albumThumbnailAssetId ?? "").isEmpty {
+        if let url = url {
             CachedAsyncImage(url: url)
         } else {
             Rectangle()

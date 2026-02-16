@@ -20,6 +20,7 @@ struct StoredAlbum: Codable, Identifiable {
     let allowDownload: Bool
     let showMetadata: Bool
     let password: String?
+    let provider: String
     let createdAt: Date
 
     // Custom decoding to handle missing fields in older stored data
@@ -36,6 +37,7 @@ struct StoredAlbum: Codable, Identifiable {
         allowDownload = try container.decodeIfPresent(Bool.self, forKey: .allowDownload) ?? true
         showMetadata = try container.decodeIfPresent(Bool.self, forKey: .showMetadata) ?? true
         password = try container.decodeIfPresent(String.self, forKey: .password)
+        provider = try container.decodeIfPresent(String.self, forKey: .provider) ?? "immich"
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 
@@ -51,6 +53,7 @@ struct StoredAlbum: Codable, Identifiable {
         self.allowDownload = displayAlbum.allowDownload
         self.showMetadata = displayAlbum.showMetadata
         self.password = displayAlbum.password
+        self.provider = displayAlbum.provider.rawValue
         self.createdAt = createdAt
     }
 
@@ -66,14 +69,15 @@ struct StoredAlbum: Codable, Identifiable {
             allowUpload: allowUpload,
             allowDownload: allowDownload,
             showMetadata: showMetadata,
-            password: password
+            password: password,
+            provider: PhotoProvider(rawValue: provider) ?? .immich
         )
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, albumName, albumThumbnailAssetId, baseURL, shareKey
         case albumId, assetCount, allowUpload, allowDownload, showMetadata
-        case password, createdAt
+        case password, provider, createdAt
     }
 }
 
