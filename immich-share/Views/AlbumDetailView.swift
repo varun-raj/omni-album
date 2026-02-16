@@ -21,7 +21,6 @@ struct AlbumDetailView: View {
     @State private var scrollOffset: CGFloat = 0
     @State private var showingAlbumInfo = false
     @State private var showingUploadQueue = false
-    @State private var navigateToUpload = false
     @State private var hasAppeared = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -77,18 +76,12 @@ struct AlbumDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 16) {
-                    // Upload status button (shows when there are uploads for this album)
-                    if !uploadService.uploads(for: album.albumId).isEmpty {
+                    // Upload button (shows when uploads allowed or uploads exist)
+                    if viewModel.allowUpload || !uploadService.uploads(for: album.albumId).isEmpty {
                         Button {
                             showingUploadQueue = true
                         } label: {
                             UploadStatusIcon(uploadService: uploadService, albumId: album.albumId)
-                        }
-                    }
-
-                    if viewModel.allowUpload {
-                        NavigationLink(destination: PhotoPickerView(album: album)) {
-                            Image(systemName: "square.and.arrow.up")
                         }
                     }
 
@@ -104,7 +97,7 @@ struct AlbumDetailView: View {
             AlbumInfoSheet(viewModel: viewModel)
         }
         .sheet(isPresented: $showingUploadQueue) {
-            UploadQueueSheet(uploadService: uploadService, albumId: album.albumId)
+            UploadQueueSheet(uploadService: uploadService, album: album)
         }
         .task {
             await viewModel.loadIfNeeded()

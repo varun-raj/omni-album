@@ -57,54 +57,59 @@ struct UploadStatusIcon: View {
     }
 
     var body: some View {
-        ZStack {
+        Group {
             if isUploading || pendingCount > 0 {
-                // Progress ring around cloud icon
-                Circle()
-                    .stroke(Color(.systemGray4), lineWidth: 2.5)
-                    .frame(width: 28, height: 28)
+                // Uploading — pill with progress ring + count
+                HStack(spacing: 5) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color(.systemGray4), lineWidth: 2)
+                            .frame(width: 20, height: 20)
 
-                Circle()
-                    .trim(from: 0, to: totalProgress)
-                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                    .frame(width: 28, height: 28)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.1), value: totalProgress)
+                        Circle()
+                            .trim(from: 0, to: totalProgress)
+                            .stroke(Color.blue, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                            .frame(width: 20, height: 20)
+                            .rotationEffect(.degrees(-90))
+                            .animation(.linear(duration: 0.1), value: totalProgress)
 
-                // Cloud icon in center
-                Image(systemName: "icloud.and.arrow.up")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.blue)
-            } else if failedCount > 0 {
-                // Failed state - cloud with error badge
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: "icloud.and.arrow.up")
-                        .font(.system(size: 20))
-                        .foregroundStyle(.primary)
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.blue)
+                    }
 
-                    Circle()
-                        .fill(.red)
-                        .frame(width: 14, height: 14)
-                        .overlay {
-                            Text("\(failedCount)")
-                                .font(.system(size: 8, weight: .bold, design: .rounded))
-                                .foregroundStyle(.white)
-                        }
-                        .offset(x: 4, y: -4)
+                    Text("\(pendingCount)")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.blue)
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.blue.opacity(0.12), in: Capsule())
+            } else if failedCount > 0 {
+                // Failed — pill with icon + count
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.icloud.fill")
+                        .font(.system(size: 15))
+
+                    Text("\(failedCount)")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                }
+                .foregroundStyle(.red)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.red.opacity(0.12), in: Capsule())
             } else if completedCount > 0 && pendingCount == 0 {
-                // All completed - checkmark cloud
+                // All completed — green checkmark cloud
                 Image(systemName: "checkmark.icloud.fill")
                     .font(.system(size: 20))
                     .foregroundStyle(.green)
             } else {
-                // Default idle state (no uploads)
+                // Default idle state
                 Image(systemName: "icloud.and.arrow.up")
                     .font(.system(size: 20))
                     .foregroundStyle(.primary)
             }
         }
-        .frame(width: 30, height: 30)
     }
 }
 
@@ -205,8 +210,18 @@ struct UploadProgressBanner: View {
 
 struct UploadQueueSheet: View {
     @ObservedObject var uploadService: UploadQueueService
-    let albumId: String?  // nil shows all uploads
+    let album: DisplayAlbum?
     @Environment(\.dismiss) private var dismiss
+
+    // Photo picker state
+    @State private var showingPicker = false
+    @State private var selectedAssets: [SelectedAsset] = []
+    @State private var isLoadingPhotos = false
+    @State private var loadingProgress = 0
+    @State private var loadingTotal = 0
+
+    private var albumId: String? { album?.albumId }
+    private var allowUpload: Bool { album?.allowUpload ?? false }
 
     private var filteredUploads: [UploadTask] {
         if let albumId = albumId {
@@ -238,20 +253,58 @@ struct UploadQueueSheet: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if filteredUploads.isEmpty {
-                    ContentUnavailableView {
-                        Label("No Uploads", systemImage: "icloud.and.arrow.up")
-                    } description: {
-                        Text("Photos you upload will appear here.")
+            List {
+                // Add Photos section
+                if allowUpload {
+                    Section {
+                        Button {
+                            showingPicker = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "photo.badge.plus")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(.blue)
+                                    .frame(width: 32)
+
+                                Text("Choose Photos")
+                                    .foregroundStyle(.primary)
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                }
+
+                // Loading indicator while processing selected photos
+                if isLoadingPhotos {
+                    Section {
+                        HStack(spacing: 12) {
+                            ProgressView()
+                            Text("Processing photos\(loadingTotal > 0 ? " (\(loadingProgress)/\(loadingTotal))" : "")…")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                // Upload queue sections
+                if filteredUploads.isEmpty && !isLoadingPhotos {
+                    Section {
+                        ContentUnavailableView {
+                            Label("No Uploads", systemImage: "icloud.and.arrow.up")
+                        } description: {
+                            Text("Photos you upload will appear here.")
+                        }
+                        .listRowBackground(Color.clear)
                     }
                 } else {
-                    List {
-                        ForEach(groupedUploads, id: \.0) { section, tasks in
-                            Section(section) {
-                                ForEach(tasks) { uploadTask in
-                                    UploadQueueTaskRow(uploadTask: uploadTask)
-                                }
+                    ForEach(groupedUploads, id: \.0) { section, tasks in
+                        Section(section) {
+                            ForEach(tasks) { uploadTask in
+                                UploadQueueTaskRow(uploadTask: uploadTask)
                             }
                         }
                     }
@@ -300,6 +353,45 @@ struct UploadQueueSheet: View {
                 }
             }
         }
+        .sheet(isPresented: $showingPicker) {
+            PHPickerRepresentable(
+                selectedAssets: $selectedAssets,
+                isLoading: $isLoadingPhotos,
+                loadingProgress: $loadingProgress,
+                loadingTotal: $loadingTotal
+            )
+        }
+        .onChange(of: isLoadingPhotos) { oldValue, newValue in
+            // Queue selected assets once photo processing finishes
+            if oldValue && !newValue && !selectedAssets.isEmpty {
+                queueSelectedAssets()
+            }
+        }
+    }
+
+    private func queueSelectedAssets() {
+        guard let album = album, !selectedAssets.isEmpty else { return }
+
+        var tasks: [UploadTask] = []
+        for asset in selectedAssets {
+            let task = UploadTask(
+                albumId: album.albumId,
+                albumName: album.albumName,
+                baseURL: album.baseURL,
+                shareKey: album.shareKey,
+                password: album.password,
+                localAssetIdentifier: asset.localIdentifier,
+                fileName: asset.fileName,
+                fileSize: asset.fileSize
+            )
+            tasks.append(task)
+        }
+
+        if !tasks.isEmpty {
+            UploadQueueService.shared.addTasks(tasks)
+        }
+
+        selectedAssets.removeAll()
     }
 }
 
@@ -525,6 +617,6 @@ private actor ImageLoadActor {
 #Preview("Upload Queue Sheet") {
     UploadQueueSheet(
         uploadService: .shared,
-        albumId: nil
+        album: nil
     )
 }

@@ -388,7 +388,9 @@ struct AssetLightboxView: View {
 
     private func shareCurrentPhoto() {
         guard let asset = currentAsset else { return }
-        let url = viewModel.previewURL(for: asset) ?? viewModel.thumbnailURL(for: asset)
+        let url = viewModel.originalURL(for: asset)
+            ?? viewModel.previewURL(for: asset)
+            ?? viewModel.thumbnailURL(for: asset)
         guard let url = url else { return }
         isSharing = true
 
@@ -396,18 +398,21 @@ struct AssetLightboxView: View {
         generator.impactOccurred()
 
         Task {
-            let result = await withCheckedContinuation { continuation in
-                KingfisherManager.shared.retrieveImage(with: url) { result in
-                    continuation.resume(returning: result)
-                }
-            }
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                let tempDir = FileManager.default.temporaryDirectory
+                let tempFile = tempDir.appendingPathComponent(asset.originalFileName)
+                // Remove any stale file at this path
+                try? FileManager.default.removeItem(at: tempFile)
+                try data.write(to: tempFile)
 
-            await MainActor.run {
-                isSharing = false
-                switch result {
-                case .success(let value):
-                    ShareHelper.share(image: value.image)
-                case .failure(let error):
+                await MainActor.run {
+                    isSharing = false
+                    ShareHelper.share(items: [tempFile])
+                }
+            } catch {
+                await MainActor.run {
+                    isSharing = false
                     saveError = "Failed to load image: \(error.localizedDescription)"
                 }
             }
