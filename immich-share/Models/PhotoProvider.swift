@@ -11,6 +11,7 @@ import SwiftUI
 enum PhotoProvider: String, Codable, CaseIterable, Sendable {
     case immich
     case nextcloud
+    case photoprism
     case lychee
     case ente
 
@@ -18,6 +19,7 @@ enum PhotoProvider: String, Codable, CaseIterable, Sendable {
         switch self {
         case .immich: return "Immich"
         case .nextcloud: return "Nextcloud"
+        case .photoprism: return "PhotoPrism"
         case .lychee: return "Lychee"
         case .ente: return "Ente"
         }
@@ -27,6 +29,7 @@ enum PhotoProvider: String, Codable, CaseIterable, Sendable {
         switch self {
         case .immich: return "photo.on.rectangle.angled"
         case .nextcloud: return "cloud"
+        case .photoprism: return "camera"
         case .lychee: return "leaf"
         case .ente: return "lock.shield"
         }
@@ -36,6 +39,7 @@ enum PhotoProvider: String, Codable, CaseIterable, Sendable {
         switch self {
         case .immich: return .blue
         case .nextcloud: return .cyan
+        case .photoprism: return .orange
         case .lychee: return .green
         case .ente: return .purple
         }
@@ -45,6 +49,7 @@ enum PhotoProvider: String, Codable, CaseIterable, Sendable {
         switch self {
         case .immich: return "Self-hosted photo & video backup"
         case .nextcloud: return "Self-hosted productivity platform"
+        case .photoprism: return "AI-powered photo app"
         case .lychee: return "Self-hosted photo management"
         case .ente: return "End-to-end encrypted photo storage"
         }
@@ -55,6 +60,7 @@ enum PhotoProvider: String, Codable, CaseIterable, Sendable {
         switch self {
         case .immich: return "Immich share link"
         case .nextcloud: return "Nextcloud share link"
+        case .photoprism: return "PhotoPrism share link"
         case .lychee: return "Lychee gallery link"
         case .ente: return "Ente album link"
         }
@@ -65,6 +71,7 @@ enum PhotoProvider: String, Codable, CaseIterable, Sendable {
         switch self {
         case .immich: return "https://…/share/…"
         case .nextcloud: return "https://…/apps/photos/public/…"
+        case .photoprism: return "https://…/s/…/…"
         case .lychee: return "https://…/gallery/…"
         case .ente: return "https://albums.ente.io/…"
         }
@@ -75,6 +82,7 @@ enum PhotoProvider: String, Codable, CaseIterable, Sendable {
         switch self {
         case .immich: return "Paste the full link you get when sharing an album from Immich."
         case .nextcloud: return "Paste the public album link from Nextcloud Photos."
+        case .photoprism: return "Paste the share link from PhotoPrism."
         case .lychee: return "Paste the gallery link for your public Lychee album."
         case .ente: return "Paste the shared album link from Ente Photos."
         }
@@ -83,7 +91,7 @@ enum PhotoProvider: String, Codable, CaseIterable, Sendable {
     /// Whether this provider's integration is fully implemented
     var isSupported: Bool {
         switch self {
-        case .immich, .nextcloud: return true
+        case .immich, .nextcloud, .photoprism: return true
         case .lychee, .ente: return false
         }
     }
