@@ -388,10 +388,6 @@ struct AssetLightboxView: View {
 
     private func shareCurrentPhoto() {
         guard let asset = currentAsset else { return }
-        let url = viewModel.originalURL(for: asset)
-            ?? viewModel.previewURL(for: asset)
-            ?? viewModel.thumbnailURL(for: asset)
-        guard let url = url else { return }
         isSharing = true
 
         let generator = UIImpactFeedbackGenerator(style: .medium)
@@ -399,10 +395,23 @@ struct AssetLightboxView: View {
 
         Task {
             do {
-                let (data, _) = try await URLSession.shared.data(from: url)
+                let data: Data
+                if let decryptedData = try await viewModel.loadImageData(for: asset, variant: .original) {
+                    data = decryptedData
+                } else {
+                    let url = viewModel.originalURL(for: asset)
+                        ?? viewModel.previewURL(for: asset)
+                        ?? viewModel.thumbnailURL(for: asset)
+                    guard let url = url else {
+                        isSharing = false
+                        return
+                    }
+                    let (urlData, _) = try await URLSession.shared.data(from: url)
+                    data = urlData
+                }
+
                 let tempDir = FileManager.default.temporaryDirectory
                 let tempFile = tempDir.appendingPathComponent(asset.originalFileName)
-                // Remove any stale file at this path
                 try? FileManager.default.removeItem(at: tempFile)
                 try data.write(to: tempFile)
 
@@ -437,16 +446,35 @@ struct AssetLightboxView: View {
     }
 
     private func saveImage(asset: Asset) {
-        // Try original first, fall back to preview
-        let url = viewModel.originalURL(for: asset)
-            ?? viewModel.previewURL(for: asset)
-            ?? viewModel.thumbnailURL(for: asset)
-        guard let url = url else {
-            isSaving = false
-            return
-        }
-
         Task {
+            // Try decrypted data path first (for Ente and similar providers)
+            if let decryptedData = try? await viewModel.loadImageData(for: asset, variant: .original),
+               let image = UIImage(data: decryptedData) {
+                do {
+                    try await PHPhotoLibrary.shared().performChanges {
+                        PHAssetChangeRequest.creationRequestForAsset(from: image)
+                    }
+                    await MainActor.run {
+                        showSaveSuccessToast()
+                    }
+                } catch {
+                    await MainActor.run {
+                        isSaving = false
+                        saveError = error.localizedDescription
+                    }
+                }
+                return
+            }
+
+            // Fall back to URL-based loading
+            let url = viewModel.originalURL(for: asset)
+                ?? viewModel.previewURL(for: asset)
+                ?? viewModel.thumbnailURL(for: asset)
+            guard let url = url else {
+                isSaving = false
+                return
+            }
+
             let result = await withCheckedContinuation { continuation in
                 KingfisherManager.shared.retrieveImage(with: url) { result in
                     continuation.resume(returning: result)
@@ -469,7 +497,6 @@ struct AssetLightboxView: View {
                     }
                 }
             case .failure:
-                // If original failed, try preview as fallback
                 if url == viewModel.originalURL(for: asset) {
                     let fallbackURL = viewModel.previewURL(for: asset) ?? viewModel.thumbnailURL(for: asset)
                     if let fallbackURL = fallbackURL {
@@ -585,9 +612,14 @@ private struct PhotoPageView: View {
             .clipShape(.rect(cornerRadius: 0))
         } else {
             let url = viewModel.previewURL(for: asset) ?? viewModel.thumbnailURL(for: asset)
-            ZoomablePhotoView(url: url, onTap: onTap)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipShape(.rect(cornerRadius: 0))
+            ZoomablePhotoView(
+                url: url,
+                viewModel: viewModel.requiresDecryption ? viewModel : nil,
+                asset: viewModel.requiresDecryption ? asset : nil,
+                onTap: onTap
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipShape(.rect(cornerRadius: 0))
         }
     }
 }
@@ -975,6 +1007,8 @@ struct MapDetailView: View {
 // MARK: - Zoomable photo (pinch to zoom, pan when zoomed, double-tap to zoom)
 struct ZoomablePhotoView: View {
     let url: URL?
+    var viewModel: AlbumDetailViewModel? = nil
+    var asset: Asset? = nil
     var onTap: (() -> Void)? = nil
 
     @State private var scale: CGFloat = 1
@@ -1018,6 +1052,21 @@ struct ZoomablePhotoView: View {
     private func loadImage() async {
         loadedImage = nil
         isLoading = true
+
+        // Try decrypted data path first (for Ente and similar providers)
+        if let viewModel = viewModel, let asset = asset {
+            do {
+                if let data = try await viewModel.loadImageData(for: asset, variant: .preview) {
+                    await MainActor.run {
+                        loadedImage = UIImage(data: data)
+                        isLoading = false
+                    }
+                    return
+                }
+            } catch {
+                // Fall through to URL-based loading
+            }
+        }
 
         guard let url = url else {
             isLoading = false

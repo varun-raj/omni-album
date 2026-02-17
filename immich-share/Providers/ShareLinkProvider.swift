@@ -29,9 +29,19 @@ struct SharedLinkInfo: Sendable {
     let showMetadata: Bool
 }
 
+/// Variant of an asset to fetch (thumbnail, preview, or original)
+enum AssetVariant: Sendable {
+    case thumbnail
+    case preview
+    case original
+}
+
 /// Protocol that all photo service providers must implement
 protocol ShareLinkProvider: Sendable {
     var providerType: PhotoProvider { get }
+
+    /// Whether this provider requires client-side decryption for images
+    var requiresClientDecryption: Bool { get }
 
     /// Whether this provider can handle the given URL string
     func canHandle(urlString: String) -> Bool
@@ -73,4 +83,38 @@ protocol ShareLinkProvider: Sendable {
         task: UploadTask,
         progressHandler: @escaping @Sendable (Double) -> Void
     ) async throws -> String
+
+    /// Fetch decrypted image/video data for providers that need client-side decryption
+    func fetchDecryptedData(
+        baseURL: String,
+        asset: Asset,
+        shareKey: String,
+        variant: AssetVariant
+    ) async throws -> Data
+}
+
+// MARK: - Default implementations
+
+extension ShareLinkProvider {
+    var requiresClientDecryption: Bool { false }
+
+    func fetchDecryptedData(
+        baseURL: String,
+        asset: Asset,
+        shareKey: String,
+        variant: AssetVariant
+    ) async throws -> Data {
+        throw ProviderError.decryptionNotSupported
+    }
+}
+
+enum ProviderError: LocalizedError {
+    case decryptionNotSupported
+
+    var errorDescription: String? {
+        switch self {
+        case .decryptionNotSupported:
+            return "This provider does not support client-side decryption."
+        }
+    }
 }

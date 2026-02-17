@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		8B226ED72F34450800F07346 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 8B226E012F3341A500F07346 /* Kingfisher */; };
 		8B226F0E2F34560100F07346 /* UploadWidgetExtension.appex in Embed Extensions */ = {isa = PBXBuildFile; fileRef = 8B226F012F34560100F07346 /* UploadWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		8B226F222F34570000F07346 /* Sodium in Frameworks */ = {isa = PBXBuildFile; productRef = 8B226F212F34570000F07346 /* Sodium */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -82,6 +83,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8B226ED72F34450800F07346 /* Kingfisher in Frameworks */,
+				8B226F222F34570000F07346 /* Sodium in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -136,6 +138,7 @@
 			name = "immich-share";
 			packageProductDependencies = (
 				8B226E012F3341A500F07346 /* Kingfisher */,
+				8B226F212F34570000F07346 /* Sodium */,
 			);
 			productName = "immich-share";
 			productReference = 8B226DDF2F3341A300F07346 /* immich-share.app */;
@@ -190,6 +193,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				8B226E002F3341A500F07346 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+				8B226F202F34570000F07346 /* XCRemoteSwiftPackageReference "swift-sodium" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8B226DE02F3341A300F07346 /* Products */;
@@ -531,6 +535,14 @@
 				minimumVersion = 8.0.0;
 			};
 		};
+		8B226F202F34570000F07346 /* XCRemoteSwiftPackageReference "swift-sodium" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/jedisct1/swift-sodium.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -538,6 +550,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 8B226E002F3341A500F07346 /* XCRemoteSwiftPackageReference "Kingfisher" */;
 			productName = Kingfisher;
+		};
+		8B226F212F34570000F07346 /* Sodium */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8B226F202F34570000F07346 /* XCRemoteSwiftPackageReference "swift-sodium" */;
+			productName = Sodium;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

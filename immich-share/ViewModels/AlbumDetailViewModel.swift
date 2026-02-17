@@ -209,6 +209,23 @@ final class AlbumDetailViewModel: ObservableObject {
         provider.videoPlaybackURL(baseURL: album.baseURL, asset: asset, shareKey: album.shareKey)
     }
 
+    /// Whether this album's provider requires client-side decryption
+    var requiresDecryption: Bool {
+        provider.requiresClientDecryption
+    }
+
+    /// Load decrypted image data for providers that require client-side decryption.
+    /// Returns nil for providers that serve plaintext URLs.
+    func loadImageData(for asset: Asset, variant: AssetVariant = .preview) async throws -> Data? {
+        guard provider.requiresClientDecryption else { return nil }
+        return try await provider.fetchDecryptedData(
+            baseURL: album.baseURL,
+            asset: asset,
+            shareKey: album.shareKey,
+            variant: variant
+        )
+    }
+
     /// Check if asset is a video
     func isVideo(_ asset: Asset) -> Bool {
         asset.type == .video

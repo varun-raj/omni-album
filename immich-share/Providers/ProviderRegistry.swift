@@ -16,7 +16,8 @@ final class ProviderRegistry: Sendable {
         providers = [
             .immich: ImmichProvider(),
             .nextcloud: NextcloudProvider(),
-            .photoprism: PhotoPrismProvider()
+            .photoprism: PhotoPrismProvider(),
+            .ente: EnteProvider()
         ]
     }
 
