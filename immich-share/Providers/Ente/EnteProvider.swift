@@ -22,7 +22,6 @@ struct EnteProvider: ShareLinkProvider {
     func canHandle(urlString: String) -> Bool {
         guard let url = URL(string: urlString) else { return false }
         let host = url.host?.lowercased() ?? ""
-        // Match albums.ente.io or any URL with ente-style ?t=...#... pattern on ente domains
         return host == "albums.ente.io" || host.hasSuffix(".ente.io")
     }
 
@@ -31,14 +30,12 @@ struct EnteProvider: ShareLinkProvider {
             throw EnteServiceError.invalidBaseURL
         }
 
-        // Extract access token from ?t= query parameter
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         guard let accessToken = components?.queryItems?.first(where: { $0.name == "t" })?.value,
               !accessToken.isEmpty else {
             throw EnteServiceError.invalidBaseURL
         }
 
-        // Extract collection key from fragment (#...)
         guard let fragment = url.fragment, !fragment.isEmpty else {
             throw EnteServiceError.invalidBaseURL
         }
@@ -69,15 +66,11 @@ struct EnteProvider: ShareLinkProvider {
         }
 
         let collection = try await EnteService.fetchCollectionInfo(accessToken: accessToken)
-
-        // Decrypt the album name
         let albumName = decryptCollectionName(collection: collection, collectionKey: collectionKeyData) ?? "Ente Album"
 
-        // Fetch files to get count and cover thumbnail
         let files = try await EnteService.fetchFiles(accessToken: accessToken)
         let activeFiles = files.filter { $0.isDeleted != true }
 
-        // Get cover thumbnail ID
         let coverFileId = activeFiles.first.map { String($0.id) }
 
         // Decrypt and cache cover thumbnail if available
@@ -88,12 +81,11 @@ struct EnteProvider: ShareLinkProvider {
                     file: firstFile,
                     fileKey: fileKey,
                     accessToken: accessToken,
-                    collectionId: String(collection.id)
+                    cacheDir: accessToken
                 )
             }
         }
 
-        // Composite shareKey: accessToken|base58CollectionKey
         let compositeShareKey = "\(accessToken)|\(base58Key)"
 
         return SharedLinkInfo(
@@ -123,23 +115,19 @@ struct EnteProvider: ShareLinkProvider {
         let files = try await EnteService.fetchFiles(accessToken: accessToken)
         let activeFiles = files.filter { $0.isDeleted != true }
 
-        let collectionId = String(collection.id)
-
-        // Process all files: decrypt keys, metadata, and thumbnails
+        // Build assets from decrypted metadata (no thumbnail downloads here)
         var assets: [Asset] = []
+        var thumbnailWork: [(EnteFile, Data)] = []
+
         for file in activeFiles {
             guard let fileKey = decryptFileKey(file: file, collectionKey: collectionKeyData) else {
                 continue
             }
 
-            // Decrypt metadata for filename and creation date
             let metadata = decryptFileMetadata(file: file, fileKey: fileKey)
-
-            // Determine asset type from metadata or filename
             let fileName = metadata?.title ?? "IMG_\(file.id).jpg"
             let assetType = guessAssetType(fileName: fileName, fileType: metadata?.fileType)
 
-            // Format creation date
             let createdAt: String?
             if let creationTime = metadata?.creationTime {
                 let date = Date(timeIntervalSince1970: TimeInterval(creationTime) / 1_000_000)
@@ -150,15 +138,6 @@ struct EnteProvider: ShareLinkProvider {
                 createdAt = nil
             }
 
-            // Download and cache the thumbnail
-            try? await downloadAndCacheThumbnail(
-                file: file,
-                fileKey: fileKey,
-                accessToken: accessToken,
-                collectionId: collectionId
-            )
-
-            // Build providerData with keys needed for on-demand decryption
             let providerData: [String: String] = [
                 "fileId": String(file.id),
                 "fileKey": fileKey.base64EncodedString(),
@@ -166,7 +145,6 @@ struct EnteProvider: ShareLinkProvider {
                 "thumbDecryptionHeader": file.thumbnail.decryptionHeader,
             ]
 
-            // Build EXIF data from metadata
             let exif: AssetExif?
             if metadata?.latitude != nil || metadata?.longitude != nil || metadata?.w != nil {
                 exif = AssetExif(
@@ -202,6 +180,21 @@ struct EnteProvider: ShareLinkProvider {
                 providerData: providerData
             )
             assets.append(asset)
+            thumbnailWork.append((file, fileKey))
+        }
+
+        // Download thumbnails concurrently (much faster than sequential)
+        await withTaskGroup(of: Void.self) { group in
+            for (file, fileKey) in thumbnailWork {
+                group.addTask {
+                    try? await downloadAndCacheThumbnail(
+                        file: file,
+                        fileKey: fileKey,
+                        accessToken: accessToken,
+                        cacheDir: accessToken
+                    )
+                }
+            }
         }
 
         let now = ISO8601DateFormatter().string(from: Date())
@@ -223,9 +216,8 @@ struct EnteProvider: ShareLinkProvider {
     // MARK: - URL Builders
 
     func thumbnailURL(baseURL: String, assetId: String, shareKey: String) -> URL? {
-        // Return file:// URL to cached decrypted thumbnail
-        let collectionId = extractCollectionId(from: shareKey)
-        let path = thumbnailCachePath(collectionId: collectionId, fileId: assetId)
+        let cacheDir = extractCacheDir(from: shareKey)
+        let path = thumbnailCachePath(cacheDir: cacheDir, fileId: assetId)
         if FileManager.default.fileExists(atPath: path.path) {
             return path
         }
@@ -233,19 +225,14 @@ struct EnteProvider: ShareLinkProvider {
     }
 
     func previewURL(baseURL: String, asset: Asset, shareKey: String) -> URL? {
-        // Ente requires decryption - no direct URL available
-        // Use fetchDecryptedData instead
         nil
     }
 
     func originalURL(baseURL: String, asset: Asset, shareKey: String) -> URL? {
-        // Ente requires decryption - no direct URL available
-        // Use fetchDecryptedData instead
         nil
     }
 
     func videoPlaybackURL(baseURL: String, asset: Asset, shareKey: String) -> URL? {
-        // Video decryption not supported yet
         nil
     }
 
@@ -253,7 +240,7 @@ struct EnteProvider: ShareLinkProvider {
         task: UploadTask,
         progressHandler: @escaping @Sendable (Double) -> Void
     ) async throws -> String {
-        throw EnteServiceError.invalidResponse // Upload not supported for Ente
+        throw EnteServiceError.invalidResponse
     }
 
     // MARK: - Client-Side Decryption
@@ -285,20 +272,7 @@ struct EnteProvider: ShareLinkProvider {
             }
             return decrypted
 
-        case .preview:
-            // For preview, use the thumbnail (already decrypted and cached) at higher quality
-            // or download the full file for best quality
-            guard let headerStr = asset.providerData?["fileDecryptionHeader"],
-                  let header = Data(base64Encoded: headerStr) else {
-                throw EnteServiceError.decryptionFailed
-            }
-            let encrypted = try await EnteService.downloadFile(fileId: fileId, accessToken: accessToken)
-            guard let decrypted = EnteCrypto.decryptStream(encryptedData: encrypted, header: header, key: fileKey) else {
-                throw EnteServiceError.decryptionFailed
-            }
-            return decrypted
-
-        case .original:
+        case .preview, .original:
             guard let headerStr = asset.providerData?["fileDecryptionHeader"],
                   let header = Data(base64Encoded: headerStr) else {
                 throw EnteServiceError.decryptionFailed
@@ -328,8 +302,9 @@ struct EnteProvider: ShareLinkProvider {
         return (accessToken, collectionKeyData)
     }
 
-    private func extractCollectionId(from shareKey: String) -> String {
-        // We use a hash of the access token as collectionId for cache directory naming
+    /// Use the access token as the cache directory name — consistent between
+    /// fetchAlbumDetail (which writes) and thumbnailURL (which reads).
+    private func extractCacheDir(from shareKey: String) -> String {
         let parts = shareKey.split(separator: "|", maxSplits: 1)
         return String(parts.first ?? "unknown")
     }
@@ -382,51 +357,52 @@ struct EnteProvider: ShareLinkProvider {
 
         return try? JSONDecoder().decode(EnteDecryptedMetadata.self, from: decrypted)
     }
+}
 
-    private func downloadAndCacheThumbnail(
-        file: EnteFile,
-        fileKey: Data,
-        accessToken: String,
-        collectionId: String
-    ) async throws {
-        let cachePath = thumbnailCachePath(collectionId: collectionId, fileId: String(file.id))
+// MARK: - Thumbnail caching (nonisolated free functions for use from Task.detached)
 
-        // Skip if already cached
-        if FileManager.default.fileExists(atPath: cachePath.path) {
-            return
-        }
+private func downloadAndCacheThumbnail(
+    file: EnteFile,
+    fileKey: Data,
+    accessToken: String,
+    cacheDir: String
+) async throws {
+    let cachePath = thumbnailCachePath(cacheDir: cacheDir, fileId: String(file.id))
 
-        guard let header = Data(base64Encoded: file.thumbnail.decryptionHeader) else {
-            return
-        }
-
-        let encrypted = try await EnteService.downloadThumbnail(fileId: file.id, accessToken: accessToken)
-        guard let decrypted = EnteCrypto.decryptStream(encryptedData: encrypted, header: header, key: fileKey) else {
-            return
-        }
-
-        // Ensure directory exists
-        let dir = cachePath.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        try decrypted.write(to: cachePath)
+    // Skip if already cached
+    if FileManager.default.fileExists(atPath: cachePath.path) {
+        return
     }
 
-    private func thumbnailCachePath(collectionId: String, fileId: String) -> URL {
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        return cacheDir
-            .appendingPathComponent("ente-thumbs")
-            .appendingPathComponent(collectionId)
-            .appendingPathComponent("\(fileId).jpg")
+    guard let header = Data(base64Encoded: file.thumbnail.decryptionHeader) else {
+        return
     }
 
-    private func guessAssetType(fileName: String, fileType: Int?) -> AssetType {
-        // Ente fileType: 0 = image, 1 = video, 2 = livePhoto
-        if let ft = fileType {
-            return ft == 1 ? .video : .image
-        }
-        let ext = (fileName as NSString).pathExtension.lowercased()
-        let videoExtensions = ["mp4", "mov", "avi", "mkv", "webm", "m4v"]
-        return videoExtensions.contains(ext) ? .video : .image
+    let encrypted = try await EnteService.downloadThumbnail(fileId: file.id, accessToken: accessToken)
+    guard let decrypted = EnteCrypto.decryptStream(encryptedData: encrypted, header: header, key: fileKey) else {
+        return
     }
+
+    // Ensure directory exists
+    let dir = cachePath.deletingLastPathComponent()
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+    try decrypted.write(to: cachePath)
+}
+
+private func thumbnailCachePath(cacheDir: String, fileId: String) -> URL {
+    let cachesDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+    return cachesDir
+        .appendingPathComponent("ente-thumbs")
+        .appendingPathComponent(cacheDir)
+        .appendingPathComponent("\(fileId).jpg")
+}
+
+private func guessAssetType(fileName: String, fileType: Int?) -> AssetType {
+    if let ft = fileType {
+        return ft == 1 ? .video : .image
+    }
+    let ext = (fileName as NSString).pathExtension.lowercased()
+    let videoExtensions = ["mp4", "mov", "avi", "mkv", "webm", "m4v"]
+    return videoExtensions.contains(ext) ? .video : .image
 }

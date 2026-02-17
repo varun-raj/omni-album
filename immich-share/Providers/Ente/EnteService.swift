@@ -109,7 +109,6 @@ struct EnteDecryptedMetadata: Codable, Sendable {
     let w: Int?
     let h: Int?
 
-    // ente uses numeric keys in some cases
     enum CodingKeys: String, CodingKey {
         case title, creationTime, modificationTime, latitude, longitude, fileType
         case w, h
@@ -122,15 +121,20 @@ struct EnteService: Sendable {
 
     private static let apiBase = "https://api.ente.io"
 
+    private static func makeRequest(url: URL, accessToken: String) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.setValue(accessToken, forHTTPHeaderField: "X-Auth-Access-Token")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        return request
+    }
+
     /// Fetch collection info for a public shared link
     static func fetchCollectionInfo(accessToken: String) async throws -> EnteCollection {
-        guard let url = URL(string: "\(apiBase)/public-collection/info?accessToken=\(accessToken)") else {
+        guard let url = URL(string: "\(apiBase)/public-collection/info") else {
             throw EnteServiceError.invalidBaseURL
         }
 
-        var request = URLRequest(url: url)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-
+        let request = makeRequest(url: url, accessToken: accessToken)
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw EnteServiceError.invalidResponse
@@ -154,13 +158,11 @@ struct EnteService: Sendable {
         var hasMore = true
 
         while hasMore {
-            guard let url = URL(string: "\(apiBase)/public-collection/diff?accessToken=\(accessToken)&sinceTime=\(sinceTime)") else {
+            guard let url = URL(string: "\(apiBase)/public-collection/diff?sinceTime=\(sinceTime)") else {
                 throw EnteServiceError.invalidBaseURL
             }
 
-            var request = URLRequest(url: url)
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-
+            let request = makeRequest(url: url, accessToken: accessToken)
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw EnteServiceError.invalidResponse
@@ -185,13 +187,11 @@ struct EnteService: Sendable {
 
     /// Download an encrypted thumbnail
     static func downloadThumbnail(fileId: Int64, accessToken: String) async throws -> Data {
-        guard let url = URL(string: "\(apiBase)/public-collection/files/preview/\(fileId)?accessToken=\(accessToken)") else {
+        guard let url = URL(string: "\(apiBase)/public-collection/files/preview/\(fileId)") else {
             throw EnteServiceError.invalidBaseURL
         }
 
-        var request = URLRequest(url: url)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-
+        let request = makeRequest(url: url, accessToken: accessToken)
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw EnteServiceError.invalidResponse
@@ -205,13 +205,11 @@ struct EnteService: Sendable {
 
     /// Download an encrypted full-resolution file
     static func downloadFile(fileId: Int64, accessToken: String) async throws -> Data {
-        guard let url = URL(string: "\(apiBase)/public-collection/files/download/\(fileId)?accessToken=\(accessToken)") else {
+        guard let url = URL(string: "\(apiBase)/public-collection/files/download/\(fileId)") else {
             throw EnteServiceError.invalidBaseURL
         }
 
-        var request = URLRequest(url: url)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-
+        let request = makeRequest(url: url, accessToken: accessToken)
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw EnteServiceError.invalidResponse
