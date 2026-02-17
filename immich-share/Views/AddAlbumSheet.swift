@@ -42,6 +42,7 @@ struct AddAlbumSheet: View {
                 if let provider = selectedProvider {
                     if provider.isSupported {
                         linkSection
+                        optionalPasswordSection
                     } else {
                         comingSoonSection
                     }
@@ -71,7 +72,6 @@ struct AddAlbumSheet: View {
             .onChange(of: urlText) { _, _ in
                 if requiresPassword {
                     requiresPassword = false
-                    passwordText = ""
                 }
                 localError = nil
             }
@@ -182,7 +182,30 @@ struct AddAlbumSheet: View {
         }
     }
 
-    // MARK: - Password Section
+    // MARK: - Optional Password Section (shown proactively)
+
+    @ViewBuilder
+    private var optionalPasswordSection: some View {
+        if !requiresPassword {
+            Section {
+                SecureField("Password (optional)", text: $passwordText)
+                    .textContentType(.password)
+                    .focused($focusedField, equals: .password)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        if canAdd && !isValidating {
+                            addAndDismissIfSuccess()
+                        }
+                    }
+            } header: {
+                Text("Password")
+            } footer: {
+                Text("If the share link is password protected, enter the password here.")
+            }
+        }
+    }
+
+    // MARK: - Required Password Section (shown after 401)
 
     private var passwordSection: some View {
         Section {
@@ -267,7 +290,7 @@ struct AddAlbumSheet: View {
         localError = nil
 
         Task {
-            let password = requiresPassword ? passwordText : nil
+            let password = passwordText.isEmpty ? nil : passwordText
             await viewModel.addAlbum(shareLinkURL: url, provider: provider, password: password)
             isValidating = false
 

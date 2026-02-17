@@ -1082,7 +1082,7 @@ struct ZoomablePhotoView: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .task(id: url) {
+        .task(id: asset?.id ?? url?.absoluteString ?? "") {
             await loadImage()
         }
     }

@@ -86,6 +86,17 @@ struct AlbumDetailView: View {
                     }
 
                     Button {
+                        Task { await viewModel.refresh() }
+                    } label: {
+                        if viewModel.isLoading || viewModel.isRefreshing {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                    }
+                    .disabled(viewModel.isLoading || viewModel.isRefreshing)
+
+                    Button {
                         showingAlbumInfo = true
                     } label: {
                         Image(systemName: "info.circle")

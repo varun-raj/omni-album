@@ -17,7 +17,8 @@ final class ProviderRegistry: Sendable {
             .immich: ImmichProvider(),
             .nextcloud: NextcloudProvider(),
             .photoprism: PhotoPrismProvider(),
-            .ente: EnteProvider()
+            .ente: EnteProvider(),
+            .lychee: LycheeProvider()
         ]
     }
 

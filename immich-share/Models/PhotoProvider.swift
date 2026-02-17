@@ -102,8 +102,7 @@ enum PhotoProvider: String, Codable, CaseIterable, Sendable {
     /// Whether this provider's integration is fully implemented
     var isSupported: Bool {
         switch self {
-        case .immich, .nextcloud, .photoprism, .ente: return true
-        case .lychee: return false
+        case .immich, .nextcloud, .photoprism, .ente, .lychee: return true
         }
     }
 }

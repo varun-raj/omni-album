@@ -273,6 +273,13 @@ struct EnteProvider: ShareLinkProvider {
             return decrypted
 
         case .preview, .original:
+            // Check disk cache first
+            let cacheDir = extractCacheDir(from: shareKey)
+            let cachePath = previewCachePath(cacheDir: cacheDir, fileId: fileIdStr)
+            if let cached = try? Data(contentsOf: cachePath) {
+                return cached
+            }
+
             guard let headerStr = asset.providerData?["fileDecryptionHeader"],
                   let header = Data(base64Encoded: headerStr) else {
                 throw EnteServiceError.decryptionFailed
@@ -281,6 +288,12 @@ struct EnteProvider: ShareLinkProvider {
             guard let decrypted = EnteCrypto.decryptStream(encryptedData: encrypted, header: header, key: fileKey) else {
                 throw EnteServiceError.decryptionFailed
             }
+
+            // Cache to disk for next time
+            let dir = cachePath.deletingLastPathComponent()
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? decrypted.write(to: cachePath)
+
             return decrypted
         }
     }
@@ -388,6 +401,14 @@ private func downloadAndCacheThumbnail(
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
     try decrypted.write(to: cachePath)
+}
+
+private func previewCachePath(cacheDir: String, fileId: String) -> URL {
+    let cachesDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+    return cachesDir
+        .appendingPathComponent("ente-previews")
+        .appendingPathComponent(cacheDir)
+        .appendingPathComponent("\(fileId)")
 }
 
 private func thumbnailCachePath(cacheDir: String, fileId: String) -> URL {
