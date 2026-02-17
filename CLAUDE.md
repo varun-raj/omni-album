@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-immich-share is a native iOS/macOS SwiftUI app that lets users view shared albums from self-hosted Immich photo servers. Users paste Immich share links, and the app fetches and displays albums with their photos in a Photos-like interface.
+OmniAlbum is a native iOS/macOS SwiftUI app that lets users view shared albums from multiple self-hosted photo servers (Immich, Nextcloud, PhotoPrism, Lychee, Ente). Users paste share links, and the app fetches and displays albums with their photos in a Photos-like interface.
 
 ## Build & Run
 
-This is an Xcode project. Open `immich-share.xcodeproj` in Xcode and build/run from there (Cmd+R). There are no external dependencies or package managers.
+This is an Xcode project. Open `OmniAlbum.xcodeproj` in Xcode and build/run from there (Cmd+R). There are no external dependencies or package managers.
 
 **CloudKit Setup Required**: Before the app can save/fetch albums, you must create the `Album` record type in CloudKit Dashboard. See `CLOUDKIT_SETUP.md` for the schema and instructions.
 
@@ -32,7 +32,7 @@ This is an Xcode project. Open `immich-share.xcodeproj` in Xcode and build/run f
 - `ImmichAsset` - Individual photo/video with full EXIF metadata
 
 ### CloudKit Schema
-Container: `iCloud.com.skcript.immich-share`
+Container: `iCloud.com.skcript.omnialbum`
 Record type: `Album` with fields: `id`, `albumName`, `albumThumbnailAssetId`, `baseURL`, `shareKey`, `albumId`, `assetCount`, `createdAt`
 
 ## SwiftUI Patterns

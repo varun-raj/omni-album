@@ -1,4 +1,4 @@
-# CloudKit setup for immich-share
+# CloudKit setup for OmniAlbum
 
 The app stores added albums in CloudKit. You must create the **Album** record type in the CloudKit Dashboard before saving or querying will work.
 
@@ -6,12 +6,12 @@ The app stores added albums in CloudKit. You must create the **Album** record ty
 
 - Go to [iCloud Dashboard](https://icloud.developer.apple.com/)
 - Sign in with your Apple Developer account
-- Select the container **iCloud.com.skcript.immich-share** (or create it under your App ID’s iCloud capability first)
+- Select the container **iCloud.com.skcript.omnialbum** (or create it under your App ID's iCloud capability first)
 
 ## 2. Create the Album record type
 
 1. In the left sidebar, open **Schema** → **Record Types**
-2. Click **+** (or “Add Record Type”)
+2. Click **+** (or "Add Record Type")
 3. Set **Record Type** name to: `Album`
 4. Add these fields (click **+** under Field Names):
 

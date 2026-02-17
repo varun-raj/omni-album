@@ -21,7 +21,7 @@ struct WidgetAlbumEntry: Codable {
 }
 
 enum WidgetAlbumData {
-    static let appGroupId = "group.com.skcript.immich-share"
+    static let appGroupId = "group.com.skcript.omnialbum"
     private static let albumsKey = "widgetAlbums"
 
     static func loadAlbums() -> [WidgetAlbumEntry] {
