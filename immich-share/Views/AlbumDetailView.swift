@@ -295,8 +295,10 @@ struct AlbumDetailView: View {
                     .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 1)
                 }
 
-                // Photo count and date range
-                HStack(spacing: 6) {
+                // Provider badge and photo count / date range
+                HStack(spacing: 8) {
+                    ProviderBadge(provider: album.provider, size: 20)
+
                     if let count = album.assetCount {
                         Text(photoCountText(count))
                             .font(.subheadline.weight(.medium))

@@ -103,10 +103,18 @@ struct AddAlbumSheet: View {
             localError = nil
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: provider.iconName)
-                    .font(.title3)
-                    .foregroundStyle(provider.accentColor)
-                    .frame(width: 32, height: 32)
+                if let logoAsset = provider.logoAssetName {
+                    Image(logoAsset)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 32, height: 32)
+                        .clipShape(.rect(cornerRadius: 7))
+                } else {
+                    Image(systemName: provider.iconName)
+                        .font(.title3)
+                        .foregroundStyle(provider.accentColor)
+                        .frame(width: 32, height: 32)
+                }
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {

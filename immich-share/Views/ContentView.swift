@@ -229,6 +229,10 @@ struct AlbumGridCell: View {
             }
             .clipped()
             .clipShape(.rect(cornerRadius: cornerRadius))
+            .overlay(alignment: .bottomLeading) {
+                ProviderBadge(provider: album.provider, size: 22)
+                    .padding(6)
+            }
             .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
     }
 
@@ -321,16 +325,45 @@ struct AlbumListCell: View {
     private var thumbnailView: some View {
         let url = AggregatorViewModel.thumbnailURL(for: album)
 
-        if let url = url {
-            CachedAsyncImage(url: url)
+        ZStack(alignment: .bottomLeading) {
+            if let url = url {
+                CachedAsyncImage(url: url)
+            } else {
+                Rectangle()
+                    .fill(Color(.systemGray5))
+                    .overlay {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.title3)
+                            .foregroundStyle(.tertiary)
+                    }
+            }
+            ProviderBadge(provider: album.provider, size: 18)
+                .padding(4)
+        }
+    }
+}
+
+// MARK: - Provider Badge
+
+struct ProviderBadge: View {
+    let provider: PhotoProvider
+    var size: CGFloat = 20
+
+    var body: some View {
+        if let logoAsset = provider.logoAssetName {
+            Image(logoAsset)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size, height: size)
+                .clipShape(.rect(cornerRadius: size * 0.22))
+                .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
         } else {
-            Rectangle()
-                .fill(Color(.systemGray5))
-                .overlay {
-                    Image(systemName: "photo.on.rectangle")
-                        .font(.title3)
-                        .foregroundStyle(.tertiary)
-                }
+            Image(systemName: provider.iconName)
+                .font(.system(size: size * 0.55, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .background(provider.accentColor, in: .rect(cornerRadius: size * 0.22))
+                .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
         }
     }
 }

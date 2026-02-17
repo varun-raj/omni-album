@@ -447,21 +447,16 @@ struct AssetLightboxView: View {
 
     private func saveImage(asset: Asset) {
         Task {
-            // Try decrypted data path first (for Ente and similar providers)
-            if let decryptedData = try? await viewModel.loadImageData(for: asset, variant: .original),
-               let image = UIImage(data: decryptedData) {
-                do {
-                    try await PHPhotoLibrary.shared().performChanges {
-                        PHAssetChangeRequest.creationRequestForAsset(from: image)
-                    }
-                    await MainActor.run {
-                        showSaveSuccessToast()
-                    }
-                } catch {
-                    await MainActor.run {
-                        isSaving = false
-                        saveError = error.localizedDescription
-                    }
+            do {
+                // Try decrypted data path first (for Ente and similar providers)
+                if let decryptedData = try await viewModel.loadImageData(for: asset, variant: .original) {
+                    try await saveDataToPhotos(decryptedData, fileName: asset.originalFileName)
+                    return
+                }
+            } catch {
+                await MainActor.run {
+                    isSaving = false
+                    saveError = "Failed to save: \(error.localizedDescription)"
                 }
                 return
             }
@@ -472,6 +467,7 @@ struct AssetLightboxView: View {
                 ?? viewModel.thumbnailURL(for: asset)
             guard let url = url else {
                 isSaving = false
+                saveError = "No image URL available."
                 return
             }
 
@@ -542,28 +538,70 @@ struct AssetLightboxView: View {
         }
     }
 
-    private func saveVideo(asset: Asset) {
-        guard let videoURL = viewModel.videoPlaybackURL(for: asset) else {
-            isSaving = false
-            saveError = "No video URL available."
-            return
-        }
+    /// Save raw file data to Photos library via temp file (preserves original format)
+    private func saveDataToPhotos(_ data: Data, fileName: String) async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempFile = tempDir.appendingPathComponent(fileName)
+        try? FileManager.default.removeItem(at: tempFile)
+        try data.write(to: tempFile)
 
+        let ext = (fileName as NSString).pathExtension.lowercased()
+        let videoExtensions = ["mp4", "mov", "avi", "mkv", "webm", "m4v"]
+
+        do {
+            if videoExtensions.contains(ext) {
+                try await PHPhotoLibrary.shared().performChanges {
+                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: tempFile)
+                }
+            } else {
+                try await PHPhotoLibrary.shared().performChanges {
+                    PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: tempFile)
+                }
+            }
+            try? FileManager.default.removeItem(at: tempFile)
+            await MainActor.run {
+                showSaveSuccessToast()
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: tempFile)
+            throw error
+        }
+    }
+
+    private func saveVideo(asset: Asset) {
         Task {
             do {
-                // Download video to a temp file
+                // Try decrypted data path first (for Ente and similar providers)
+                if let decryptedData = try await viewModel.loadImageData(for: asset, variant: .original) {
+                    try await saveDataToPhotos(decryptedData, fileName: asset.originalFileName)
+                    return
+                }
+            } catch {
+                await MainActor.run {
+                    isSaving = false
+                    saveError = "Failed to save: \(error.localizedDescription)"
+                }
+                return
+            }
+
+            // Fall back to URL-based download
+            guard let videoURL = viewModel.videoPlaybackURL(for: asset) else {
+                isSaving = false
+                saveError = "No video URL available."
+                return
+            }
+
+            do {
                 let (tempURL, _) = try await URLSession.shared.download(from: videoURL)
                 let tempDir = FileManager.default.temporaryDirectory
                 let videoFile = tempDir.appendingPathComponent(UUID().uuidString + ".mp4")
 
                 try FileManager.default.moveItem(at: tempURL, to: videoFile)
 
-                // Save to Photos
                 try await PHPhotoLibrary.shared().performChanges {
                     PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: videoFile)
                 }
 
-                // Clean up temp file
                 try? FileManager.default.removeItem(at: videoFile)
 
                 await MainActor.run {

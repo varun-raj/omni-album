@@ -35,6 +35,17 @@ enum PhotoProvider: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// Asset catalog image name for the provider logo (nil = use SF Symbol fallback)
+    var logoAssetName: String? {
+        switch self {
+        case .immich: return "ProviderImmich"
+        case .nextcloud: return "ProviderNextcloud"
+        case .photoprism: return "ProviderPhotoPrism"
+        case .ente: return "ProviderEnte"
+        case .lychee: return nil
+        }
+    }
+
     var accentColor: Color {
         switch self {
         case .immich: return .blue

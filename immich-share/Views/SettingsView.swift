@@ -175,11 +175,11 @@ struct SettingsView: View {
         }
 
         // Create CSV content
-        var csvContent = "albumName,baseURL,shareKey,albumId,assetCount,allowUpload\n"
+        var csvContent = "albumName,baseURL,shareKey,albumId,assetCount,allowUpload,allowDownload,provider\n"
 
         for album in albums {
             let escapedName = album.albumName.replacingOccurrences(of: "\"", with: "\"\"")
-            let row = "\"\(escapedName)\",\"\(album.baseURL)\",\"\(album.shareKey)\",\"\(album.albumId)\",\(album.assetCount ?? 0),\(album.allowUpload)\n"
+            let row = "\"\(escapedName)\",\"\(album.baseURL)\",\"\(album.shareKey)\",\"\(album.albumId)\",\(album.assetCount ?? 0),\(album.allowUpload),\(album.allowDownload),\(album.provider.rawValue)\n"
             csvContent.append(row)
         }
 
@@ -275,6 +275,8 @@ struct SettingsView: View {
             let albumId = fields[3]
             let assetCount = fields.count > 4 ? Int(fields[4]) : nil
             let allowUpload = fields.count > 5 ? (fields[5] == "true" || fields[5] == "1") : false
+            let allowDownload = fields.count > 6 ? (fields[6] == "true" || fields[6] == "1") : true
+            let provider = fields.count > 7 ? (PhotoProvider(rawValue: fields[7]) ?? .immich) : .immich
 
             let album = DisplayAlbum(
                 id: shareKey, // Use shareKey as ID
@@ -284,7 +286,9 @@ struct SettingsView: View {
                 shareKey: shareKey,
                 albumId: albumId,
                 assetCount: assetCount,
-                allowUpload: allowUpload
+                allowUpload: allowUpload,
+                allowDownload: allowDownload,
+                provider: provider
             )
             albums.append(album)
         }
