@@ -31,4 +31,16 @@ final class ProviderRegistry: Sendable {
     func provider(for type: PhotoProvider) -> (any ShareLinkProvider)? {
         providers[type]
     }
+
+    /// Detect which provider can handle a URL, checking in deterministic order
+    /// (most-specific first: Ente → Nextcloud → Lychee → Immich → PhotoPrism)
+    func detectProvider(from urlString: String) -> PhotoProvider? {
+        let order: [PhotoProvider] = [.ente, .nextcloud, .lychee, .immich, .photoprism]
+        for type in order {
+            if let p = providers[type], p.canHandle(urlString: urlString) {
+                return type
+            }
+        }
+        return nil
+    }
 }
