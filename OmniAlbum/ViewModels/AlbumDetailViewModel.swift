@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import WidgetKit
 
 @MainActor
 final class AlbumDetailViewModel: ObservableObject {
@@ -175,6 +176,23 @@ final class AlbumDetailViewModel: ObservableObject {
                     "thumbnailId": detail.thumbnailAssetId as Any
                 ]
             )
+
+            // Update shared asset pool for Random Photo widget
+            let imageAssets = detail.assets.filter { $0.type == .image }
+            let imageAssetIds = imageAssets.map(\.id)
+            let imageAssetDates = imageAssets.map { $0.createdAt ?? "" }
+            if !imageAssetIds.isEmpty {
+                SharedAlbumData.updateAssetPool(
+                    albumId: album.albumId,
+                    provider: album.provider.rawValue,
+                    baseURL: album.baseURL,
+                    shareKey: album.shareKey,
+                    albumName: album.albumName,
+                    assetIds: imageAssetIds,
+                    assetDates: imageAssetDates
+                )
+                WidgetCenter.shared.reloadTimelines(ofKind: "RandomPhotoWidget")
+            }
 
             // Compute date range off main thread after UI updates
             let loadedAssets = detail.assets

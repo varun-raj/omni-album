@@ -22,9 +22,11 @@ struct AlbumDetailView: View {
     @State private var showingAlbumInfo = false
     @State private var showingUploadQueue = false
     @State private var hasAppeared = false
+    @State private var pendingAssetId: String?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
 
     init(album: DisplayAlbum) {
         self.album = album
@@ -111,7 +113,20 @@ struct AlbumDetailView: View {
             UploadQueueSheet(uploadService: uploadService, album: album)
         }
         .task {
+            // Capture pending deep link asset before loading
+            if let target = deepLinkRouter.consumeTarget(), target.albumId == album.albumId {
+                pendingAssetId = target.assetId
+            }
             await viewModel.loadIfNeeded()
+            // Auto-open lightbox if we arrived via deep link
+            if let assetId = pendingAssetId {
+                pendingAssetId = nil
+                if let index = viewModel.assets.firstIndex(where: { $0.id == assetId }) {
+                    lightboxSelection = LightboxSelection(id: index)
+                } else if !viewModel.assets.isEmpty {
+                    lightboxSelection = LightboxSelection(id: 0)
+                }
+            }
         }
         .onAppear {
             if hasAppeared {

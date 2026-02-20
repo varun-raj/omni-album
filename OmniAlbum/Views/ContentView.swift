@@ -14,6 +14,8 @@ enum AlbumViewMode: String {
 
 struct ContentView: View {
     @StateObject private var viewModel = AggregatorViewModel()
+    @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
+    @State private var navigationPath = NavigationPath()
     @State private var showAddSheet = false
     @State private var searchText = ""
     @AppStorage("albumViewMode") private var viewMode: AlbumViewMode = .grid
@@ -42,7 +44,7 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             Group {
                 if viewModel.isLoading && viewModel.albums.isEmpty {
                     loadingView
@@ -80,6 +82,21 @@ struct ContentView: View {
                 AddAlbumSheet(isPresented: $showAddSheet, viewModel: viewModel) {
                     showAddSheet = false
                 }
+            }
+        }
+        .onChange(of: deepLinkRouter.pendingTarget?.albumId) { _, albumId in
+            guard let albumId else { return }
+            handleDeepLink(albumId: albumId)
+        }
+    }
+
+    private func handleDeepLink(albumId: String) {
+        // Find the matching album from loaded data
+        if let album = viewModel.albums.first(where: { $0.albumId == albumId }) {
+            // Reset navigation stack and push to the album
+            navigationPath = NavigationPath()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                navigationPath.append(album)
             }
         }
     }

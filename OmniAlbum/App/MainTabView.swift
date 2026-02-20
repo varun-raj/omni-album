@@ -8,12 +8,12 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @State private var selectedTab = 0
     @EnvironmentObject private var networkMonitor: NetworkMonitor
+    @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
 
     var body: some View {
         ZStack(alignment: .top) {
-            TabView(selection: $selectedTab) {
+            TabView(selection: $deepLinkRouter.selectedTab) {
                 ContentView()
                     .tabItem {
                         Label("Albums", systemImage: "photo.on.rectangle.angled")
@@ -50,4 +50,5 @@ struct MainTabView: View {
 #Preview {
     MainTabView()
         .environmentObject(NetworkMonitor.shared)
+        .environmentObject(DeepLinkRouter())
 }

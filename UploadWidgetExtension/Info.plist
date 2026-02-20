@@ -4,6 +4,11 @@
 <dict>
 	<key>CFBundleDisplayName</key>
 	<string>Upload Progress</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

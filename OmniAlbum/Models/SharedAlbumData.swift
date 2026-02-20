@@ -62,3 +62,57 @@ enum SharedAlbumData {
         return nil
     }
 }
+
+// MARK: - Shared Asset Pool (for Random Photo Widget)
+
+/// Cached pool of image asset IDs for a single album, stored in App Group for widget access
+struct SharedAssetPool: Codable {
+    let albumId: String
+    let provider: String
+    let baseURL: String
+    let shareKey: String
+    let albumName: String
+    let assetIds: [String]  // Up to 50 image asset IDs
+    let assetDates: [String]?  // Parallel array of ISO8601 date strings (optional for backward compat)
+    let lastUpdated: Date
+}
+
+extension SharedAlbumData {
+    private static let assetPoolsKey = "widgetAssetPools"
+
+    /// Save asset pools to shared UserDefaults
+    static func saveAssetPools(_ pools: [SharedAssetPool]) {
+        guard let defaults = UserDefaults(suiteName: appGroupId) else { return }
+        if let data = try? JSONEncoder().encode(pools) {
+            defaults.set(data, forKey: assetPoolsKey)
+        }
+    }
+
+    /// Load asset pools from shared UserDefaults
+    static func loadAssetPools() -> [SharedAssetPool] {
+        guard let defaults = UserDefaults(suiteName: appGroupId),
+              let data = defaults.data(forKey: assetPoolsKey),
+              let pools = try? JSONDecoder().decode([SharedAssetPool].self, from: data) else {
+            return []
+        }
+        return pools
+    }
+
+    /// Update or insert the asset pool for a given album
+    static func updateAssetPool(albumId: String, provider: String, baseURL: String, shareKey: String, albumName: String, assetIds: [String], assetDates: [String] = []) {
+        var pools = loadAssetPools()
+        pools.removeAll { $0.albumId == albumId }
+        let pool = SharedAssetPool(
+            albumId: albumId,
+            provider: provider,
+            baseURL: baseURL,
+            shareKey: shareKey,
+            albumName: albumName,
+            assetIds: Array(assetIds.prefix(50)),
+            assetDates: assetDates.isEmpty ? nil : Array(assetDates.prefix(50)),
+            lastUpdated: Date()
+        )
+        pools.append(pool)
+        saveAssetPools(pools)
+    }
+}

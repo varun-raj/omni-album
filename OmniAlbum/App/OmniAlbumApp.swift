@@ -12,7 +12,10 @@ import BackgroundTasks
 @main
 struct OmniAlbumApp: App {
     @StateObject private var networkMonitor = NetworkMonitor.shared
-    @State private var spotlightAlbumId: String?
+    @StateObject private var deepLinkRouter = DeepLinkRouter()
+    @State private var showSplash = true
+    @State private var mainContentScale: CGFloat = 0.92
+    @State private var mainContentOpacity: Double = 0
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -51,18 +54,46 @@ struct OmniAlbumApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainTabView()
-                .environmentObject(networkMonitor)
-                .onContinueUserActivity(CSSearchableItemActionType) { activity in
-                    if let albumId = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
-                        spotlightAlbumId = albumId
+            ZStack {
+                MainTabView()
+                    .environmentObject(networkMonitor)
+                    .environmentObject(deepLinkRouter)
+                    .onOpenURL { url in
+                        deepLinkRouter.handle(url: url)
                     }
-                }
-                .onChange(of: scenePhase) { _, newPhase in
-                    if newPhase == .background {
-                        scheduleBackgroundUploadIfNeeded()
+                    .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                        if let albumId = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
+                            deepLinkRouter.handle(url: URL(string: "omnialbum://photo?albumId=\(albumId)")!)
+                        }
                     }
+                    .onChange(of: scenePhase) { _, newPhase in
+                        if newPhase == .background {
+                            scheduleBackgroundUploadIfNeeded()
+                        }
+                    }
+                    .scaleEffect(mainContentScale)
+                    .opacity(mainContentOpacity)
+
+                if showSplash {
+                    SplashScreenView()
+                        .transition(
+                            .asymmetric(
+                                insertion: .identity,
+                                removal: .move(edge: .top)
+                                    .combined(with: .opacity)
+                            )
+                        )
+                        .zIndex(1)
                 }
+            }
+            .task {
+                try? await Task.sleep(for: .seconds(1.8))
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) {
+                    showSplash = false
+                    mainContentScale = 1.0
+                    mainContentOpacity = 1.0
+                }
+            }
         }
     }
 

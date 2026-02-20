@@ -23,9 +23,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKeys.wifiOnlyUpload) private var wifiOnlyUpload = false
     @ObservedObject private var uploadService = UploadQueueService.shared
 
-    @State private var showingExportSheet = false
     @State private var showingImportPicker = false
-    @State private var exportURL: URL?
     @State private var importError: String?
     @State private var showingImportError = false
     @State private var importSuccess = false
@@ -95,9 +93,19 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Link(destination: URL(string: "https://immich.app")!) {
+                    Link(destination: URL(string: "https://micro.skcript.com/omni-album")!) {
                         HStack {
-                            Label("Immich Website", systemImage: "globe")
+                            Label("OmniAlbum Website", systemImage: "globe")
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Link(destination: URL(string: "https://apps.apple.com/us/app/omni-album/id6759308996")!) {
+                        HStack {
+                            Label("View on App Store", systemImage: "apple.logo")
                             Spacer()
                             Image(systemName: "arrow.up.right")
                                 .font(.caption)
@@ -114,7 +122,7 @@ struct SettingsView: View {
                         Label("Rate on App Store", systemImage: "star")
                     }
 
-                    Link(destination: URL(string: "https://github.com/anthropics/claude-code/issues")!) {
+                    Link(destination: URL(string: "https://skcript-micro.featureos.app/b/omni-album")!) {
                         HStack {
                             Label("Send Feedback", systemImage: "envelope")
                             Spacer()
@@ -137,11 +145,6 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
-            .sheet(isPresented: $showingExportSheet) {
-                if let url = exportURL {
-                    ShareSheet(items: [url])
-                }
-            }
             .fileImporter(
                 isPresented: $showingImportPicker,
                 allowedContentTypes: [.commaSeparatedText],
@@ -174,27 +177,51 @@ struct SettingsView: View {
             return
         }
 
-        // Create CSV content
-        var csvContent = "albumName,baseURL,shareKey,albumId,assetCount,allowUpload,allowDownload,provider\n"
+        // Create CSV content with full share URL
+        var csvContent = "albumName,shareLink,assetCount,allowUpload,allowDownload,provider\n"
 
         for album in albums {
             let escapedName = album.albumName.replacingOccurrences(of: "\"", with: "\"\"")
-            let row = "\"\(escapedName)\",\"\(album.baseURL)\",\"\(album.shareKey)\",\"\(album.albumId)\",\(album.assetCount ?? 0),\(album.allowUpload),\(album.allowDownload),\(album.provider.rawValue)\n"
+            let shareLink = reconstructShareURL(for: album)
+            let escapedLink = shareLink.replacingOccurrences(of: "\"", with: "\"\"")
+            let row = "\"\(escapedName)\",\"\(escapedLink)\",\(album.assetCount ?? 0),\(album.allowUpload),\(album.allowDownload),\(album.provider.rawValue)\n"
             csvContent.append(row)
         }
 
-        // Write to temp file
+        // Write to temp file and share
         let tempDir = FileManager.default.temporaryDirectory
-        let fileName = "immich-albums-\(formatDateForFilename()).csv"
+        let fileName = "omnialbum-albums-\(formatDateForFilename()).csv"
         let fileURL = tempDir.appendingPathComponent(fileName)
 
         do {
             try csvContent.write(to: fileURL, atomically: true, encoding: .utf8)
-            exportURL = fileURL
-            showingExportSheet = true
+            presentShareSheet(for: fileURL)
         } catch {
             importError = "Failed to create export file: \(error.localizedDescription)"
             showingImportError = true
+        }
+    }
+
+    /// Reconstruct the original share URL from stored baseURL, shareKey, and provider
+    private func reconstructShareURL(for album: DisplayAlbum) -> String {
+        switch album.provider {
+        case .immich:
+            return "\(album.baseURL)/share/\(album.shareKey)"
+        case .nextcloud:
+            return "\(album.baseURL)/apps/photos/public/\(album.shareKey)"
+        case .photoprism:
+            // shareKey is composite: "linkToken|previewToken|downloadToken|albumUID"
+            let linkToken = album.shareKey.components(separatedBy: "|").first ?? album.shareKey
+            return "\(album.baseURL)/s/\(linkToken)"
+        case .lychee:
+            return "\(album.baseURL)/gallery/\(album.shareKey)"
+        case .ente:
+            // shareKey is composite: "accessToken|base58Key"
+            let parts = album.shareKey.components(separatedBy: "|")
+            if parts.count >= 2 {
+                return "https://albums.ente.io?t=\(parts[0])#\(parts[1])"
+            }
+            return "\(album.baseURL)/\(album.shareKey)"
         }
     }
 
@@ -220,32 +247,36 @@ struct SettingsView: View {
 
             do {
                 let content = try String(contentsOf: url, encoding: .utf8)
-                let importedAlbums = parseCSV(content)
+                let shareLinks = parseCSVShareLinks(content)
 
-                guard !importedAlbums.isEmpty else {
-                    importError = "No valid albums found in the CSV file"
+                guard !shareLinks.isEmpty else {
+                    importError = "No valid share links found in the CSV file"
                     showingImportError = true
                     return
                 }
 
-                // Add imported albums
-                let localService = LocalAlbumsService()
-                var addedCount = 0
+                // Add albums via share links (validates against server)
+                Task {
+                    let viewModel = AggregatorViewModel()
+                    // Wait for initial load so we can check duplicates
+                    try? await Task.sleep(for: .seconds(0.5))
 
-                for album in importedAlbums {
-                    // Check if album already exists
-                    let existing = localService.loadAlbums()
-                    if !existing.contains(where: { $0.id == album.id || $0.shareKey == album.shareKey }) {
-                        localService.addAlbum(album)
-                        addedCount += 1
+                    var addedCount = 0
+                    let albumCountBefore = viewModel.albums.count
+                    for (link, provider) in shareLinks {
+                        let countBefore = viewModel.albums.count
+                        await viewModel.addAlbum(shareLinkURL: link, provider: provider)
+                        if viewModel.albums.count > countBefore {
+                            addedCount += 1
+                        }
                     }
+
+                    importedCount = addedCount
+                    importSuccess = true
+
+                    // Post notification to refresh album list
+                    NotificationCenter.default.post(name: .albumDataUpdated, object: nil)
                 }
-
-                importedCount = addedCount
-                importSuccess = true
-
-                // Post notification to refresh album list
-                NotificationCenter.default.post(name: .albumDataUpdated, object: nil)
 
             } catch {
                 importError = "Failed to read file: \(error.localizedDescription)"
@@ -258,42 +289,81 @@ struct SettingsView: View {
         }
     }
 
-    private func parseCSV(_ content: String) -> [DisplayAlbum] {
-        var albums: [DisplayAlbum] = []
+    /// Parse CSV and extract share links with their providers.
+    /// Supports new format (albumName,shareLink,...,provider) and
+    /// legacy format (albumName,baseURL,shareKey,albumId,...,provider).
+    private func parseCSVShareLinks(_ content: String) -> [(String, PhotoProvider)] {
+        var results: [(String, PhotoProvider)] = []
         let lines = content.components(separatedBy: .newlines)
 
-        // Skip header row
+        guard let header = lines.first else { return results }
+        let headerFields = parseCSVLine(header).map { $0.lowercased().trimmingCharacters(in: .whitespaces) }
+        let isNewFormat = headerFields.contains("sharelink")
+
         for (index, line) in lines.enumerated() {
             guard index > 0, !line.isEmpty else { continue }
-
             let fields = parseCSVLine(line)
-            guard fields.count >= 4 else { continue }
 
-            let albumName = fields[0]
-            let baseURL = fields[1]
-            let shareKey = fields[2]
-            let albumId = fields[3]
-            let assetCount = fields.count > 4 ? Int(fields[4]) : nil
-            let allowUpload = fields.count > 5 ? (fields[5] == "true" || fields[5] == "1") : false
-            let allowDownload = fields.count > 6 ? (fields[6] == "true" || fields[6] == "1") : true
-            let provider = fields.count > 7 ? (PhotoProvider(rawValue: fields[7]) ?? .immich) : .immich
+            if isNewFormat {
+                // New format: albumName,shareLink,assetCount,allowUpload,allowDownload,provider
+                guard fields.count >= 2 else { continue }
+                let shareLink = fields[1]
+                guard !shareLink.isEmpty else { continue }
 
-            let album = DisplayAlbum(
-                id: shareKey, // Use shareKey as ID
-                albumName: albumName,
-                albumThumbnailAssetId: nil,
-                baseURL: baseURL,
-                shareKey: shareKey,
-                albumId: albumId,
-                assetCount: assetCount,
-                allowUpload: allowUpload,
-                allowDownload: allowDownload,
-                provider: provider
-            )
-            albums.append(album)
+                // Detect provider from the link or from the CSV column
+                let provider: PhotoProvider
+                if fields.count >= 6, let p = PhotoProvider(rawValue: fields[5]) {
+                    provider = p
+                } else {
+                    provider = detectProvider(from: shareLink) ?? .immich
+                }
+                results.append((shareLink, provider))
+            } else {
+                // Legacy format: albumName,baseURL,shareKey,albumId,assetCount,allowUpload,allowDownload,provider
+                guard fields.count >= 4 else { continue }
+                let baseURL = fields[1]
+                let shareKey = fields[2]
+                let provider = fields.count > 7 ? (PhotoProvider(rawValue: fields[7]) ?? .immich) : .immich
+
+                // Reconstruct share URL from legacy fields
+                let shareLink = reconstructShareURLFromFields(baseURL: baseURL, shareKey: shareKey, provider: provider)
+                results.append((shareLink, provider))
+            }
         }
 
-        return albums
+        return results
+    }
+
+    /// Auto-detect provider from a share link URL
+    private func detectProvider(from urlString: String) -> PhotoProvider? {
+        for providerType in PhotoProvider.allCases {
+            if let provider = ProviderRegistry.shared.provider(for: providerType),
+               provider.canHandle(urlString: urlString) {
+                return providerType
+            }
+        }
+        return nil
+    }
+
+    /// Reconstruct share URL from legacy CSV fields
+    private func reconstructShareURLFromFields(baseURL: String, shareKey: String, provider: PhotoProvider) -> String {
+        switch provider {
+        case .immich:
+            return "\(baseURL)/share/\(shareKey)"
+        case .nextcloud:
+            return "\(baseURL)/apps/photos/public/\(shareKey)"
+        case .photoprism:
+            let linkToken = shareKey.components(separatedBy: "|").first ?? shareKey
+            return "\(baseURL)/s/\(linkToken)"
+        case .lychee:
+            return "\(baseURL)/gallery/\(shareKey)"
+        case .ente:
+            let parts = shareKey.components(separatedBy: "|")
+            if parts.count >= 2 {
+                return "https://albums.ente.io?t=\(parts[0])#\(parts[1])"
+            }
+            return "\(baseURL)/\(shareKey)"
+        }
     }
 
     private func parseCSVLine(_ line: String) -> [String] {
@@ -320,26 +390,19 @@ struct SettingsView: View {
     private var uploadStatusBadge: some View {
         let pending = uploadService.pendingCount
         let failed = uploadService.failedCount
-        let total = uploadService.queue.count
 
-        if pending > 0 {
-            Text("\(pending) uploading")
-                .font(.caption)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.blue, in: Capsule())
-        } else if failed > 0 {
-            Text("\(failed) failed")
-                .font(.caption)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.red, in: Capsule())
-        } else if total > 0 {
-            Text("\(total)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        HStack(spacing: 6) {
+            if failed > 0 {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .font(.caption)
+            }
+
+            if pending > 0 || failed > 0 {
+                Text("\(pending + failed)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -347,6 +410,22 @@ struct SettingsView: View {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
         return "\(version) (\(build))"
+    }
+
+    private func presentShareSheet(for url: URL) {
+        #if os(iOS)
+        let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
+           let rootVC = scene.windows.first?.rootViewController {
+            // Walk to the topmost presented controller
+            var topVC = rootVC
+            while let presented = topVC.presentedViewController {
+                topVC = presented
+            }
+            activityVC.popoverPresentationController?.sourceView = topVC.view
+            topVC.present(activityVC, animated: true)
+        }
+        #endif
     }
 
     private func requestAppReview() {
@@ -567,20 +646,8 @@ struct UploadQueueView: View {
     }
 }
 
-// MARK: - Share Sheet
-
 #if os(iOS)
 import StoreKit
-
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
 #endif
 
 #Preview {

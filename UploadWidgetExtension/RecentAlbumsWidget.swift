@@ -82,6 +82,13 @@ struct AlbumWidgetEntry: TimelineEntry {
 // MARK: - Timeline Provider
 
 struct AlbumWidgetProvider: TimelineProvider {
+    private static let urlSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForResource = 30
+        return URLSession(configuration: config, delegate: WidgetSessionDelegate.shared, delegateQueue: nil)
+    }()
+
     func placeholder(in context: Context) -> AlbumWidgetEntry {
         AlbumWidgetEntry(date: .now, albums: [
             AlbumDisplayItem(albumName: "Vacation Photos", assetCount: 42, thumbnail: nil),
@@ -134,7 +141,7 @@ struct AlbumWidgetProvider: TimelineProvider {
             }
 
             group.enter()
-            URLSession.shared.dataTask(with: url) { data, _, _ in
+            Self.urlSession.dataTask(with: url) { data, _, _ in
                 let image = data.flatMap { UIImage(data: $0) }
                 lock.lock()
                 results.append((i, AlbumDisplayItem(albumName: album.albumName, assetCount: album.assetCount, thumbnail: image)))
