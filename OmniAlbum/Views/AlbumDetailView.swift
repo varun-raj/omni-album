@@ -39,6 +39,7 @@ struct AlbumDetailView: View {
         mainContent
             .navigationTitle(album.albumName)
             .navigationBarTitleDisplayMode(.large)
+            .albumSubtitle(summaryText)
             .background(BarsFader(hidden: isViewing))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -128,22 +129,20 @@ struct AlbumDetailView: View {
         } else if viewModel.assets.isEmpty && !viewModel.isLoading {
             emptyView
         } else {
-            VStack(spacing: 0) {
-                albumSummary.opacity(isViewing ? 0 : 1)
-                ScatterPhotoGrid(
-                    viewModel: viewModel,
-                    controller: grid,
-                    onVideo: openInLightbox,
-                    onOpen: { id in withAnimation(.easeInOut(duration: 0.3)) { isViewing = id != nil } },
-                    onInfo: { asset in
-                        detailsAsset = asset
-                        grid.showInfo(asset != nil)
-                    },
-                    onShare: { asset in Task { await share(asset) } },
-                    onSave: { asset in Task { await save(asset) } }
-                )
-            }
-            .ignoresSafeArea(edges: .bottom)
+            // Full-screen: ScatterCore centres an opened photo in its own bounds, so nothing may sit above it.
+            ScatterPhotoGrid(
+                viewModel: viewModel,
+                controller: grid,
+                onVideo: openInLightbox,
+                onOpen: { id in withAnimation(.easeInOut(duration: 0.3)) { isViewing = id != nil } },
+                onInfo: { asset in
+                    detailsAsset = asset
+                    grid.showInfo(asset != nil)
+                },
+                onShare: { asset in Task { await share(asset) } },
+                onSave: { asset in Task { await save(asset) } }
+            )
+            .ignoresSafeArea()
             .overlay {
                 if viewModel.isLoading && viewModel.assets.isEmpty {
                     loadingOverlay
@@ -151,26 +150,6 @@ struct AlbumDetailView: View {
             }
             .animation(.easeOut(duration: 0.3), value: viewModel.isLoading)
         }
-    }
-
-    /// Compact replacement for the old hero header: provider, count, date range, owner.
-    private var albumSummary: some View {
-        HStack(spacing: 8) {
-            ProviderBadge(provider: album.provider, size: 18)
-            Text(summaryText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Spacer()
-            Button {
-                if let url = URL(string: viewModel.shareURL) { openURL(url) }
-            } label: {
-                Label("Open in Browser", systemImage: "link")
-                    .labelStyle(.iconOnly)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
     }
 
     private var summaryText: String {
@@ -493,5 +472,14 @@ private extension Color {
             green: Double((rgb & 0x00FF00) >> 8) / 255.0,
             blue: Double(rgb & 0x0000FF) / 255.0
         )
+    }
+}
+
+
+private extension View {
+    /// Provider/count/date line under the title (iOS 26+; older systems just get the title).
+    @ViewBuilder
+    func albumSubtitle(_ text: String) -> some View {
+        if #available(iOS 26, *) { navigationSubtitle(text) } else { self }
     }
 }
