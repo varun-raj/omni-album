@@ -86,7 +86,7 @@ struct AlbumWidgetProvider: TimelineProvider {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30
-        return URLSession(configuration: config, delegate: WidgetSessionDelegate.shared, delegateQueue: nil)
+        return URLSession(configuration: config)
     }()
 
     func placeholder(in context: Context) -> AlbumWidgetEntry {

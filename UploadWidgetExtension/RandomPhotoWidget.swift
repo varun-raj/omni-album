@@ -348,12 +348,11 @@ struct RandomPhotoProvider: AppIntentTimelineProvider {
         }
     }
 
-    /// URLSession that trusts self-signed certificates (common for self-hosted servers)
-    private static let urlSession: URLSession = {
+        private static let urlSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30
-        return URLSession(configuration: config, delegate: WidgetSessionDelegate.shared, delegateQueue: nil)
+        return URLSession(configuration: config)
     }()
 
     /// Download image from URL
@@ -370,22 +369,6 @@ struct RandomPhotoProvider: AppIntentTimelineProvider {
         } catch {
             return nil
         }
-    }
-}
-
-/// Delegate that accepts self-signed certificates for self-hosted photo servers
-final class WidgetSessionDelegate: NSObject, URLSessionDelegate {
-    static let shared = WidgetSessionDelegate()
-
-    func urlSession(
-        _ session: URLSession,
-        didReceive challenge: URLAuthenticationChallenge
-    ) async -> (URLSession.AuthChallengeDisposition, URLCredential?) {
-        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-           let trust = challenge.protectionSpace.serverTrust {
-            return (.useCredential, URLCredential(trust: trust))
-        }
-        return (.performDefaultHandling, nil)
     }
 }
 

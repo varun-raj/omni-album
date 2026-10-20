@@ -252,6 +252,8 @@ final class AggregatorViewModel: ObservableObject {
                 return
             }
 
+            PasswordStore.set(password, for: display.albumId)
+
             // Save to local first (instant)
             localService.addAlbum(display)
             albums.insert(display, at: 0)

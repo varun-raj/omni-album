@@ -64,7 +64,7 @@ final class CloudKitAlbumsService {
         record["allowUpload"] = album.allowUpload ? 1 : 0
         record["allowDownload"] = album.allowDownload ? 1 : 0
         record["showMetadata"] = album.showMetadata ? 1 : 0
-        record["password"] = album.password  // Stored in private CloudKit database
+        record["password"] = nil  // lives in the Keychain (PasswordStore); clears legacy plaintext
         record["provider"] = album.provider.rawValue
 
         do {

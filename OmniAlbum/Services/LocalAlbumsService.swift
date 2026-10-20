@@ -19,7 +19,7 @@ struct StoredAlbum: Codable, Identifiable {
     let allowUpload: Bool
     let allowDownload: Bool
     let showMetadata: Bool
-    let password: String?
+    let password: String?  // legacy: only decoded, for migration into PasswordStore; never encoded
     let provider: String
     let createdAt: Date
 
@@ -69,9 +69,25 @@ struct StoredAlbum: Codable, Identifiable {
             allowUpload: allowUpload,
             allowDownload: allowDownload,
             showMetadata: showMetadata,
-            password: password,
+            password: password ?? PasswordStore.get(albumId),
             provider: PhotoProvider(rawValue: provider) ?? .immich
         )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(albumName, forKey: .albumName)
+        try c.encodeIfPresent(albumThumbnailAssetId, forKey: .albumThumbnailAssetId)
+        try c.encode(baseURL, forKey: .baseURL)
+        try c.encode(shareKey, forKey: .shareKey)
+        try c.encode(albumId, forKey: .albumId)
+        try c.encodeIfPresent(assetCount, forKey: .assetCount)
+        try c.encode(allowUpload, forKey: .allowUpload)
+        try c.encode(allowDownload, forKey: .allowDownload)
+        try c.encode(showMetadata, forKey: .showMetadata)
+        try c.encode(provider, forKey: .provider)
+        try c.encode(createdAt, forKey: .createdAt)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -99,6 +115,7 @@ final class LocalAlbumsService {
         do {
             let data = try Data(contentsOf: fileURL)
             let stored = try JSONDecoder().decode([StoredAlbum].self, from: data)
+            migratePasswords(stored)
             // Sort by createdAt descending (newest first)
             let sorted = stored.sorted { $0.createdAt > $1.createdAt }
             return sorted.map { $0.toDisplayAlbum() }
@@ -143,6 +160,7 @@ final class LocalAlbumsService {
     /// Delete an album from local storage
     func deleteAlbum(id: String) {
         var albums = loadStoredAlbums()
+        if let removed = albums.first(where: { $0.id == id }) { PasswordStore.set(nil, for: removed.albumId) }
         albums.removeAll { $0.id == id }
         saveStoredAlbums(albums)
     }
@@ -155,6 +173,7 @@ final class LocalAlbumsService {
         let localDates = Dictionary(localAlbums.map { ($0.id, $0.createdAt) }, uniquingKeysWith: { first, _ in first })
 
         // Use CloudKit albums as source of truth, but preserve local creation dates
+        for album in cloudKitAlbums where album.password != nil { PasswordStore.set(album.password, for: album.albumId) }
         let cloudIds = Set(cloudKitAlbums.map(\.id))
         let merged = cloudKitAlbums.map { album in
             StoredAlbum(
@@ -174,6 +193,14 @@ final class LocalAlbumsService {
 
     // MARK: - Private helpers
 
+    /// Move passwords from older albums.json files into the Keychain, then rewrite the file without them.
+    private func migratePasswords(_ stored: [StoredAlbum]) {
+        let legacy = stored.filter { $0.password != nil }
+        guard !legacy.isEmpty else { return }
+        for album in legacy { PasswordStore.set(album.password, for: album.albumId) }
+        saveStoredAlbums(stored)
+    }
+
     private func loadStoredAlbums() -> [StoredAlbum] {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return []
@@ -181,7 +208,9 @@ final class LocalAlbumsService {
 
         do {
             let data = try Data(contentsOf: fileURL)
-            return try JSONDecoder().decode([StoredAlbum].self, from: data)
+            let stored = try JSONDecoder().decode([StoredAlbum].self, from: data)
+            migratePasswords(stored)
+            return stored
         } catch {
             return []
         }

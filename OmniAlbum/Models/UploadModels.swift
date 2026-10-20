@@ -78,7 +78,7 @@ struct UploadTask: Codable, Identifiable, Equatable {
         albumName = try container.decode(String.self, forKey: .albumName)
         baseURL = try container.decode(String.self, forKey: .baseURL)
         shareKey = try container.decode(String.self, forKey: .shareKey)
-        password = try container.decodeIfPresent(String.self, forKey: .password)
+        password = try container.decodeIfPresent(String.self, forKey: .password) ?? PasswordStore.get(albumId)
         localAssetIdentifier = try container.decode(String.self, forKey: .localAssetIdentifier)
         fileName = try container.decode(String.self, forKey: .fileName)
         fileSize = try container.decodeIfPresent(Int64.self, forKey: .fileSize)
@@ -89,6 +89,26 @@ struct UploadTask: Codable, Identifiable, Equatable {
         progress = try container.decode(Double.self, forKey: .progress)
         errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
         uploadedAssetId = try container.decodeIfPresent(String.self, forKey: .uploadedAssetId)
+    }
+
+    /// Password is never written to the queue file; decode re-reads it from PasswordStore.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(albumId, forKey: .albumId)
+        try c.encode(albumName, forKey: .albumName)
+        try c.encode(baseURL, forKey: .baseURL)
+        try c.encode(shareKey, forKey: .shareKey)
+        try c.encode(localAssetIdentifier, forKey: .localAssetIdentifier)
+        try c.encode(fileName, forKey: .fileName)
+        try c.encodeIfPresent(fileSize, forKey: .fileSize)
+        try c.encode(provider, forKey: .provider)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(completedAt, forKey: .completedAt)
+        try c.encode(status, forKey: .status)
+        try c.encode(progress, forKey: .progress)
+        try c.encodeIfPresent(errorMessage, forKey: .errorMessage)
+        try c.encodeIfPresent(uploadedAssetId, forKey: .uploadedAssetId)
     }
 
     private enum CodingKeys: String, CodingKey {
