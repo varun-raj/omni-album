@@ -36,18 +36,18 @@ struct OmniAlbumApp: App {
             guard let processingTask = task as? BGProcessingTask else { return }
             Task { @MainActor in
                 let uploadService = UploadQueueService.shared
+                var expired = false
+                processingTask.expirationHandler = {
+                    Task { @MainActor in
+                        expired = true
+                        uploadService.pauseAll()
+                    }
+                }
                 if uploadService.pendingCount > 0 {
                     uploadService.startProcessing()
                 }
-                // Complete the task after a reasonable time
-                processingTask.expirationHandler = {
-                    uploadService.pauseAll()
-                }
-                // Mark task complete when uploads finish or after timeout
-                Task {
-                    try? await Task.sleep(for: .seconds(25))
-                    processingTask.setTaskCompleted(success: true)
-                }
+                await uploadService.waitUntilIdle()
+                processingTask.setTaskCompleted(success: !expired)
             }
         }
     }

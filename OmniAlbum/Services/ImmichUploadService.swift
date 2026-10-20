@@ -62,8 +62,9 @@ final class ImmichUploadService {
             throw ImmichUploadError.assetNotFound
         }
 
-        // Get asset data and metadata
-        let (imageData, mimeType) = try await loadAssetData(asset: asset)
+        // Stream the asset to disk instead of loading it into memory
+        let exported = try await AssetFileExporter.export(asset)
+        defer { try? FileManager.default.removeItem(at: exported.url) }
 
         // Build multipart request
         let boundary = UUID().uuidString
@@ -73,20 +74,21 @@ final class ImmichUploadService {
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        // Build multipart body
-        let body = buildMultipartBody(
+        // Build multipart body on disk
+        let bodyFile = try buildMultipartFile(
             boundary: boundary,
-            imageData: imageData,
+            assetFile: exported.url,
             fileName: task.fileName,
-            mimeType: mimeType,
+            mimeType: exported.mimeType,
             asset: asset,
             deviceAssetId: task.localAssetIdentifier
         )
+        defer { try? FileManager.default.removeItem(at: bodyFile) }
 
         // Upload with progress tracking
         let (data, response) = try await uploadWithProgress(
             request: request,
-            body: body,
+            bodyFile: bodyFile,
             progressHandler: progressHandler
         )
 
@@ -188,98 +190,23 @@ final class ImmichUploadService {
         return components.url!
     }
 
-    private func loadAssetData(asset: PHAsset) async throws -> (Data, String) {
-        return try await withCheckedThrowingContinuation { continuation in
-            let options = PHImageRequestOptions()
-            options.deliveryMode = .highQualityFormat
-            options.isNetworkAccessAllowed = true
-            options.isSynchronous = false
-
-            if asset.mediaType == .video {
-                // For videos, get the video data
-                let videoOptions = PHVideoRequestOptions()
-                videoOptions.isNetworkAccessAllowed = true
-                videoOptions.deliveryMode = .highQualityFormat
-
-                PHImageManager.default().requestAVAsset(forVideo: asset, options: videoOptions) { avAsset, _, _ in
-                    guard let urlAsset = avAsset as? AVURLAsset else {
-                        continuation.resume(throwing: ImmichUploadError.dataLoadFailed)
-                        return
-                    }
-
-                    do {
-                        let data = try Data(contentsOf: urlAsset.url)
-                        let mimeType = self.mimeType(for: urlAsset.url.pathExtension)
-                        continuation.resume(returning: (data, mimeType))
-                    } catch {
-                        continuation.resume(throwing: ImmichUploadError.dataLoadFailed)
-                    }
-                }
-            } else {
-                // For images, get the image data
-                PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { data, uti, _, _ in
-                    guard let imageData = data else {
-                        continuation.resume(throwing: ImmichUploadError.dataLoadFailed)
-                        return
-                    }
-
-                    let mimeType = self.mimeType(fromUTI: uti)
-                    continuation.resume(returning: (imageData, mimeType))
-                }
-            }
-        }
-    }
-
-    private func mimeType(fromUTI uti: String?) -> String {
-        switch uti {
-        case "public.jpeg", "public.jpg":
-            return "image/jpeg"
-        case "public.png":
-            return "image/png"
-        case "public.heic", "public.heif":
-            return "image/heic"
-        case "com.compuserve.gif":
-            return "image/gif"
-        case "public.tiff":
-            return "image/tiff"
-        case "com.adobe.raw-image":
-            return "image/x-adobe-dng"
-        default:
-            return "image/jpeg"
-        }
-    }
-
-    private func mimeType(for fileExtension: String) -> String {
-        switch fileExtension.lowercased() {
-        case "mp4", "m4v":
-            return "video/mp4"
-        case "mov":
-            return "video/quicktime"
-        case "avi":
-            return "video/x-msvideo"
-        case "mkv":
-            return "video/x-matroska"
-        case "webm":
-            return "video/webm"
-        default:
-            return "video/mp4"
-        }
-    }
-
-    private func buildMultipartBody(
+    /// Writes the multipart body to a temp file, copying the asset in 1 MB chunks.
+    private func buildMultipartFile(
         boundary: String,
-        imageData: Data,
+        assetFile: URL,
         fileName: String,
         mimeType: String,
         asset: PHAsset,
         deviceAssetId: String
-    ) -> Data {
-        var body = Data()
+    ) throws -> URL {
+        let bodyURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        FileManager.default.createFile(atPath: bodyURL.path, contents: nil)
+        let out = try FileHandle(forWritingTo: bodyURL)
+        defer { try? out.close() }
         let crlf = "\r\n"
 
-        // Helper to append string as data
         func appendString(_ string: String) {
-            body.append(string.data(using: .utf8)!)
+            try? out.write(contentsOf: Data(string.utf8))
         }
 
         // deviceAssetId
@@ -323,18 +250,22 @@ final class ImmichUploadService {
         appendString("--\(boundary)\(crlf)")
         appendString("Content-Disposition: form-data; name=\"assetData\"; filename=\"\(fileName)\"\(crlf)")
         appendString("Content-Type: \(mimeType)\(crlf)\(crlf)")
-        body.append(imageData)
+        let input = try FileHandle(forReadingFrom: assetFile)
+        defer { try? input.close() }
+        while let chunk = try input.read(upToCount: 1 << 20), !chunk.isEmpty {
+            try out.write(contentsOf: chunk)
+        }
         appendString("\(crlf)")
 
         // End boundary
         appendString("--\(boundary)--\(crlf)")
 
-        return body
+        return bodyURL
     }
 
     private func uploadWithProgress(
         request: URLRequest,
-        body: Data,
+        bodyFile: URL,
         progressHandler: @escaping (Double) -> Void
     ) async throws -> (Data, URLResponse) {
         let delegate = UploadProgressDelegate(progressHandler: progressHandler)
@@ -346,13 +277,7 @@ final class ImmichUploadService {
 
         defer { delegateSession.finishTasksAndInvalidate() }
 
-        // Write body to temp file for upload task (required for delegate progress)
-        let tempFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-        try body.write(to: tempFile)
-        defer { try? FileManager.default.removeItem(at: tempFile) }
-
-        let (data, response) = try await delegateSession.upload(for: request, fromFile: tempFile)
+        let (data, response) = try await delegateSession.upload(for: request, fromFile: bodyFile)
         progressHandler(1.0)
         return (data, response)
     }

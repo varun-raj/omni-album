@@ -255,65 +255,19 @@ final class NextcloudProvider: ShareLinkProvider, @unchecked Sendable {
             throw NextcloudServiceError.invalidResponse
         }
 
-        let (data, _) = try await loadAssetData(asset: asset)
+        let exported = try await AssetFileExporter.export(asset)
+        defer { try? FileManager.default.removeItem(at: exported.url) }
 
         try await service.uploadFile(
             baseURL: task.baseURL,
             token: task.shareKey,
             password: task.password,
             fileName: task.fileName,
-            data: data,
+            file: exported.url,
             progressHandler: progressHandler
         )
 
         // Nextcloud WebDAV PUT doesn't return an asset ID, use filename as identifier
         return task.fileName
-    }
-
-    // MARK: - Private Helpers
-
-    private func loadAssetData(asset: PHAsset) async throws -> (Data, String) {
-        try await withCheckedThrowingContinuation { continuation in
-            let options = PHImageRequestOptions()
-            options.deliveryMode = .highQualityFormat
-            options.isNetworkAccessAllowed = true
-            options.isSynchronous = false
-
-            if asset.mediaType == .video {
-                let videoOptions = PHVideoRequestOptions()
-                videoOptions.isNetworkAccessAllowed = true
-                videoOptions.deliveryMode = .highQualityFormat
-
-                PHImageManager.default().requestAVAsset(forVideo: asset, options: videoOptions) { avAsset, _, _ in
-                    guard let urlAsset = avAsset as? AVURLAsset else {
-                        continuation.resume(throwing: NextcloudServiceError.invalidResponse)
-                        return
-                    }
-                    do {
-                        let data = try Data(contentsOf: urlAsset.url)
-                        let ext = urlAsset.url.pathExtension.lowercased()
-                        let mimeType = ext == "mov" ? "video/quicktime" : "video/mp4"
-                        continuation.resume(returning: (data, mimeType))
-                    } catch {
-                        continuation.resume(throwing: NextcloudServiceError.invalidResponse)
-                    }
-                }
-            } else {
-                PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { data, uti, _, _ in
-                    guard let imageData = data else {
-                        continuation.resume(throwing: NextcloudServiceError.invalidResponse)
-                        return
-                    }
-                    let mimeType: String
-                    switch uti {
-                    case "public.jpeg", "public.jpg": mimeType = "image/jpeg"
-                    case "public.png": mimeType = "image/png"
-                    case "public.heic", "public.heif": mimeType = "image/heic"
-                    default: mimeType = "image/jpeg"
-                    }
-                    continuation.resume(returning: (imageData, mimeType))
-                }
-            }
-        }
     }
 }

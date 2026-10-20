@@ -114,6 +114,11 @@ final class UploadQueueService: ObservableObject {
         }
     }
 
+    /// Suspends until the current processing run ends (queue drained, paused, or waiting for Wi-Fi).
+    func waitUntilIdle() async {
+        await processingTask?.value
+    }
+
     /// Pause all uploads
     func pauseAll() {
         isProcessing = false

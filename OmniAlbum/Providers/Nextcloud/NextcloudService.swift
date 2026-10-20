@@ -123,7 +123,7 @@ final class NextcloudService {
         token: String,
         password: String?,
         fileName: String,
-        data: Data,
+        file: URL,
         progressHandler: @escaping @Sendable (Double) -> Void
     ) async throws {
         guard let base = normalizeBaseURL(baseURL) else {
@@ -153,12 +153,7 @@ final class NextcloudService {
         )
         defer { delegateSession.finishTasksAndInvalidate() }
 
-        // Write to temp file for progress tracking
-        let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try data.write(to: tempFile)
-        defer { try? FileManager.default.removeItem(at: tempFile) }
-
-        let (_, response) = try await delegateSession.upload(for: request, fromFile: tempFile)
+        let (_, response) = try await delegateSession.upload(for: request, fromFile: file)
         progressHandler(1.0)
 
         guard let http = response as? HTTPURLResponse else {
