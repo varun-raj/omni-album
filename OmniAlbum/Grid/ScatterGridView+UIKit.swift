@@ -78,7 +78,7 @@ extension ScatterGridView {
     var stageArea: CGRect {
         let v = visibleRect
         guard infoShown else { return v }
-        let top = (scrollView?.adjustedContentInset.top ?? 0) - 30 // stageFrame's 50 pt margin, less 30: 20 pt under the bar
+        let top = (scrollView?.adjustedContentInset.top ?? 0) + 20 - config.stageMargin // stageFrame adds the margin back: 20 pt under the bar
         return CGRect(x: v.minX, y: v.minY + top, width: v.width, height: v.height * 0.42 - top)
     }
 

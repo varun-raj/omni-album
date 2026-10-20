@@ -15,6 +15,8 @@ struct ScatterPhotoGrid: View {
     @ObservedObject var viewModel: AlbumDetailViewModel
     let controller: ScatterGridController
     let onVideo: (Asset) -> Void
+    /// Id of the tile that opened, nil when it closes.
+    let onOpen: (String?) -> Void
     /// Swipe-up on an open tile passes its asset; swipe-down / tap while info is shown passes nil.
     let onInfo: (Asset?) -> Void
     let onShare: (Asset) -> Void
@@ -48,6 +50,7 @@ struct ScatterPhotoGrid: View {
         c.columns = horizontalSizeClass == .regular ? 6 : 3
         c.gap = 2
         c.edgeInset = 0 // edge to edge
+        c.stageMargin = 0 // opened photo fills the viewport
         c.cornerRadius = 0
         // Resolve for the current appearance; colorScheme is read above so a change re-runs body.
         c.background = UIColor.systemBackground
@@ -62,6 +65,7 @@ struct ScatterPhotoGrid: View {
             config: config,
             content: viewModel.tileContent(),
             onActivate: { id in if let asset = lookup[id] { onVideo(asset) } },
+            onOpen: onOpen,
             onInfo: viewModel.showMetadata ? { id in onInfo(id.flatMap { lookup[$0] }) } : nil,
             tileIcon: { id in lookup[id]?.type == .video ? Self.playGlyph : nil },
             tileMenu: { item in
@@ -73,7 +77,6 @@ struct ScatterPhotoGrid: View {
             },
             controller: controller
         )
-        .ignoresSafeArea(edges: .bottom)
     }
 
     private func pixelSize(of asset: Asset) -> CGSize? {

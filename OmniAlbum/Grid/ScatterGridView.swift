@@ -744,12 +744,7 @@ public final class ScatterGridView: ScatterPlatformView {
         for l in shown.values where l !== t { fade(l, to: 0.25, config.scatterFade, .linear) } // dimmed backdrop; close() restores
     }
 
-    #if os(macOS)
-    static let fitMargin: CGFloat = 40 // Fit
-    #else
-    static let fitMargin: CGFloat = 50 // the iOS caption / bar math assumes 50
-    #endif
-    /// Where tile `i` sits while open: centred in the viewport, `fitMargin` clear of each edge, at most one pixel per screen pixel.
+    /// Where tile `i` sits while open: centred in the viewport, `config.stageMargin` clear of each edge, at most one pixel per screen pixel.
     func stageRect(_ i: Int) -> CGRect {
         let p = items[i].pixelSize
         #if os(iOS)
@@ -760,7 +755,7 @@ public final class ScatterGridView: ScatterPlatformView {
         var v = visibleRect
         v.size.height -= items[i].bottomInset // room for the host's caption under the image
         #endif
-        return stageFrame(aspect: items[i].aspect, native: CGSize(width: p.width / scale, height: p.height / scale), in: v, margin: Self.fitMargin)
+        return stageFrame(aspect: items[i].aspect, native: CGSize(width: p.width / scale, height: p.height / scale), in: v, margin: config.stageMargin)
     }
     /// Starts the full-size decode for tile `i` after `dwell` seconds (hover / touch-down) so it's usually ready by the click.
     func prefetchFull(_ i: Int, dwell: Double = 0) {

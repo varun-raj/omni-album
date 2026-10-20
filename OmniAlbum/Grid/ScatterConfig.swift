@@ -25,6 +25,8 @@ public struct ScatterConfig: Sendable, Equatable {
     public var rowHeight: CGFloat = 150, gap: CGFloat = 14, cornerRadius: CGFloat = 6
     /// Pinch zoom range on the opened tile, as multiples of its staged size; a pinch rubber-bands past either end.
     public var minZoom: CGFloat = 0.25, maxZoom: CGFloat = 8
+    /// OmniAlbum: space kept clear around an opened tile (was a fixed 50; 0 = photo fills the viewport).
+    public var stageMargin: CGFloat = 50
     /// OmniAlbum: outer margin around the tiles (nil = `gap`, the original behaviour; 0 = edge to edge).
     public var edgeInset: CGFloat?
     /// OmniAlbum: > 0 lays tiles out as squares in this many fixed columns; opened tiles keep their real aspect.

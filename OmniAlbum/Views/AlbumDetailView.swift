@@ -23,6 +23,8 @@ struct AlbumDetailView: View {
     @State private var showingAlbumInfo = false
     @State private var showingUploadQueue = false
     @State private var hasAppeared = false
+    /// A photo is open in the viewer: hide every bar so it runs edge to edge.
+    @State private var isViewing = false
     @State private var actionError: String?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -37,6 +39,9 @@ struct AlbumDetailView: View {
         mainContent
             .navigationTitle(album.albumName)
             .navigationBarTitleDisplayMode(.large)
+            .toolbar(isViewing ? .hidden : .automatic, for: .navigationBar)
+            .toolbar(isViewing ? .hidden : .automatic, for: .tabBar)
+            .statusBarHidden(isViewing)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 16) {
@@ -126,11 +131,12 @@ struct AlbumDetailView: View {
             emptyView
         } else {
             VStack(spacing: 0) {
-                albumSummary
+                if !isViewing { albumSummary }
                 ScatterPhotoGrid(
                     viewModel: viewModel,
                     controller: grid,
                     onVideo: openInLightbox,
+                    onOpen: { id in withAnimation(.easeInOut(duration: 0.25)) { isViewing = id != nil } },
                     onInfo: { asset in
                         detailsAsset = asset
                         grid.showInfo(asset != nil)
@@ -139,6 +145,7 @@ struct AlbumDetailView: View {
                     onSave: { asset in Task { await save(asset) } }
                 )
             }
+            .ignoresSafeArea(edges: isViewing ? .all : .bottom)
             .overlay {
                 if viewModel.isLoading && viewModel.assets.isEmpty {
                     loadingOverlay
