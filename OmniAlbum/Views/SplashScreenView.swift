@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct SplashScreenView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var logoScale: CGFloat = 0.4
     @State private var logoOpacity: Double = 0
     @State private var logoRotation: Double = -120
@@ -65,6 +66,7 @@ struct SplashScreenView: View {
                 Spacer()
             }
         }
+        .environment(\.colorScheme, .light) // artwork is designed on white
         .onAppear {
             selectedTagline = taglines.randomElement() ?? taglines[0]
             animateIn()
@@ -72,6 +74,13 @@ struct SplashScreenView: View {
     }
 
     private func animateIn() {
+        if reduceMotion {
+            withAnimation(.easeOut(duration: 0.3)) {
+                logoScale = 1; logoOpacity = 1; logoRotation = 0
+                titleOpacity = 1; titleOffset = 0; taglineOpacity = 1; taglineOffset = 0
+            }
+            return
+        }
         // Logo appears with spring + rotation
         withAnimation(.spring(response: 0.7, dampingFraction: 0.6).delay(0.1)) {
             logoScale = 1.0

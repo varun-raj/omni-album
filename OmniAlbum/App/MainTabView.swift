@@ -12,6 +12,15 @@ struct MainTabView: View {
     @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
 
     var body: some View {
+        bodyContent
+            .onChange(of: networkMonitor.isConnected) { _, connected in
+                if !connected {
+                    AccessibilityNotification.Announcement("No internet connection").post()
+                }
+            }
+    }
+
+    private var bodyContent: some View {
         ZStack(alignment: .top) {
             TabView(selection: $deepLinkRouter.selectedTab) {
                 ContentView()
@@ -40,6 +49,7 @@ struct MainTabView: View {
                 .padding(.vertical, 8)
                 .background(.red.opacity(0.9), in: Capsule())
                 .padding(.top, 2)
+                .accessibilityElement(children: .combine)
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: networkMonitor.isConnected)
             }

@@ -60,12 +60,14 @@ struct AlbumDetailView: View {
                             }
                         }
                         .disabled(viewModel.isLoading || viewModel.isRefreshing)
+                        .accessibilityLabel("Refresh")
 
                         Button {
                             showingAlbumInfo = true
                         } label: {
                             Image(systemName: "info.circle")
                         }
+                        .accessibilityLabel("Album Info")
                     }
                 }
             }
@@ -86,6 +88,7 @@ struct AlbumDetailView: View {
                     viewModel: viewModel,
                     onDismiss: { lightboxSelection = nil }
                 )
+                .preferredColorScheme(.dark) // photo/video viewing: black stage, like Photos
             }
             .alert("Error", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
                 Button("OK") { actionError = nil }

@@ -200,6 +200,7 @@ struct AssetLightboxView: View {
                     .frame(width: 36, height: 36)
                     .background(.ultraThinMaterial, in: Circle())
             }
+            .accessibilityLabel("Close")
 
             Spacer()
 
@@ -249,6 +250,7 @@ struct AssetLightboxView: View {
                     .frame(width: 36, height: 36)
                     .background(.ultraThinMaterial, in: Circle())
             }
+            .accessibilityLabel("More")
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -274,6 +276,7 @@ struct AssetLightboxView: View {
                     }
                 }
                 .disabled(isSharing || currentAsset == nil)
+                .accessibilityLabel("Share")
             }
 
             if viewModel.showMetadata {
@@ -285,6 +288,7 @@ struct AssetLightboxView: View {
                         .frame(width: 44, height: 44)
                         .background(.ultraThinMaterial, in: Circle())
                 }
+                .accessibilityLabel("Info")
             }
 
             if viewModel.allowDownload {
@@ -302,6 +306,7 @@ struct AssetLightboxView: View {
                     }
                 }
                 .disabled(isSaving)
+                .accessibilityLabel("Save to Photos")
             }
         }
         .foregroundStyle(.primary)
@@ -325,6 +330,9 @@ struct AssetLightboxView: View {
                                 currentIndex = index
                             }
                         }
+                        .accessibilityElement()
+                        .accessibilityLabel(asset.originalFileName)
+                        .accessibilityAddTraits(currentIndex == index ? [.isButton, .isSelected] : .isButton)
                         .id(index)
                     }
                 }

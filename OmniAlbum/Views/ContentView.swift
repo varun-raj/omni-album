@@ -68,6 +68,7 @@ struct ContentView: View {
                             Image(systemName: viewMode == .grid ? "list.bullet" : "square.grid.2x2")
                                 .contentTransition(.symbolEffect(.replace))
                         }
+                        .accessibilityLabel(viewMode == .grid ? "Show as List" : "Show as Grid")
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -76,6 +77,7 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "plus")
                     }
+                    .accessibilityLabel("Add Album")
                 }
             }
             .sheet(isPresented: $showAddSheet) {
@@ -281,6 +283,7 @@ struct AlbumGridCell: View {
             }
             .padding(.horizontal, 2)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private func albumCountLabel(_ count: Int?) -> String {
@@ -352,6 +355,7 @@ struct AlbumListCell: View {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.caption)
                             .foregroundStyle(.blue)
+                            .accessibilityLabel("Uploads allowed")
                     }
 
                     if !album.allowDownload {
@@ -370,6 +374,7 @@ struct AlbumListCell: View {
                         Image(systemName: "lock.fill")
                             .font(.caption)
                             .foregroundStyle(.orange)
+                            .accessibilityLabel("Password protected")
                     }
                 }
 
@@ -383,6 +388,7 @@ struct AlbumListCell: View {
             Spacer()
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 
     private func albumCountLabel(_ count: Int?) -> String {
@@ -426,6 +432,11 @@ struct ProviderBadge: View {
     var size: CGFloat = 20
 
     var body: some View {
+        badge.accessibilityLabel(provider.displayName)
+    }
+
+    @ViewBuilder
+    private var badge: some View {
         if let logoAsset = provider.logoAssetName {
             Image(logoAsset)
                 .resizable()
