@@ -51,6 +51,9 @@ struct ScatterPhotoGrid: View {
         c.gap = 2
         c.edgeInset = 0 // edge to edge
         c.stageMargin = 0 // opened photo fills the viewport
+        // Critically damped and a touch slower than the defaults: no overshoot, steadier pace.
+        c.item = .bounce(0, response: 0.4)
+        c.openDuration = 0.4; c.closeDuration = 0.4; c.scatterDuration = 0.45; c.cornerDuration = 0.4
         c.cornerRadius = 0
         // Resolve for the current appearance; colorScheme is read above so a change re-runs body.
         c.background = UIColor.systemBackground
@@ -158,5 +161,44 @@ enum ScatterTileLoader {
             kCGImageSourceShouldCacheImmediately: true,
             kCGImageSourceThumbnailMaxPixelSize: maxPixel,
         ] as CFDictionary)
+    }
+}
+
+// MARK: - Bar fading
+
+/// Fades the navigation and tab bars by alpha. `.toolbar(.hidden)` re-lays out the screen, which makes the
+/// opening photo jump; alpha leaves every frame (and so ScatterCore's animation targets) untouched.
+struct BarsFader: UIViewControllerRepresentable {
+    let hidden: Bool
+
+    final class Coordinator {
+        weak var nav: UINavigationController?
+        weak var tab: UITabBar?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIViewController(context: Context) -> UIViewController { UIViewController() }
+
+    /// Never leave the bars invisible after leaving the screen (e.g. swipe-back while a photo is open).
+    static func dismantleUIViewController(_ vc: UIViewController, coordinator: Coordinator) {
+        coordinator.nav?.navigationBar.alpha = 1
+        coordinator.tab?.alpha = 1
+    }
+
+    func updateUIViewController(_ vc: UIViewController, context: Context) {
+        let alpha: CGFloat = hidden ? 0 : 1
+        // The representable's controller may not be attached yet on first pass.
+        DispatchQueue.main.async {
+            let nav = vc.navigationController
+            let tab = vc.tabBarController?.tabBar
+            context.coordinator.nav = nav
+            context.coordinator.tab = tab
+            guard nav?.navigationBar.alpha != alpha || tab?.alpha != alpha else { return }
+            UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+                nav?.navigationBar.alpha = alpha
+                tab?.alpha = alpha
+            }
+        }
     }
 }

@@ -39,9 +39,7 @@ struct AlbumDetailView: View {
         mainContent
             .navigationTitle(album.albumName)
             .navigationBarTitleDisplayMode(.large)
-            .toolbar(isViewing ? .hidden : .automatic, for: .navigationBar)
-            .toolbar(isViewing ? .hidden : .automatic, for: .tabBar)
-            .statusBarHidden(isViewing)
+            .background(BarsFader(hidden: isViewing))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 16) {
@@ -131,12 +129,12 @@ struct AlbumDetailView: View {
             emptyView
         } else {
             VStack(spacing: 0) {
-                if !isViewing { albumSummary }
+                albumSummary.opacity(isViewing ? 0 : 1)
                 ScatterPhotoGrid(
                     viewModel: viewModel,
                     controller: grid,
                     onVideo: openInLightbox,
-                    onOpen: { id in withAnimation(.easeInOut(duration: 0.25)) { isViewing = id != nil } },
+                    onOpen: { id in withAnimation(.easeInOut(duration: 0.3)) { isViewing = id != nil } },
                     onInfo: { asset in
                         detailsAsset = asset
                         grid.showInfo(asset != nil)
@@ -145,7 +143,7 @@ struct AlbumDetailView: View {
                     onSave: { asset in Task { await save(asset) } }
                 )
             }
-            .ignoresSafeArea(edges: isViewing ? .all : .bottom)
+            .ignoresSafeArea(edges: .bottom)
             .overlay {
                 if viewModel.isLoading && viewModel.assets.isEmpty {
                     loadingOverlay
