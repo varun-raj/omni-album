@@ -1,5 +1,5 @@
 {
-  "originHash" : "13c0d8a60ebb4af349fcac5154cdd4471b931567a6f76b112a8e722e50214102",
+  "originHash" : "74df38bd68856f6799091a7cf2401adff2502d74b818051d399df5429c6259d6",
   "pins" : [
     {
       "identity" : "kingfisher",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "d30a5fad881137e2267f96a8e3fc35c58999bb94",
         "version" : "8.6.2"
+      }
+    },
+    {
+      "identity" : "scattercore",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/skcript/ScatterCore",
+      "state" : {
+        "revision" : "99c4bd038f7524fe5cf1a946e4a7d28526a76b50",
+        "version" : "0.7.4"
       }
     },
     {

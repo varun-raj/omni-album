@@ -2,12 +2,13 @@
 //  AlbumDetailView.swift
 //  OmniAlbum
 //
-//  Album detail styled like Apple Photos: full-width hero header, dense grid.
+//  Album detail: a ScatterCore justified grid. Photos open in ScatterCore's own stage/pager;
+//  videos open in AssetLightboxView (ScatterCore only renders stills).
 //
 
 import SwiftUI
-import Kingfisher
 import Photos
+import ScatterCore
 
 private struct LightboxSelection: Identifiable {
     let id: Int
@@ -17,15 +18,15 @@ struct AlbumDetailView: View {
     let album: DisplayAlbum
     @StateObject private var viewModel: AlbumDetailViewModel
     @ObservedObject private var uploadService = UploadQueueService.shared
+    @State private var grid = ScatterGridController()
     @State private var lightboxSelection: LightboxSelection?
-    @State private var scrollOffset: CGFloat = 0
+    @State private var detailsAsset: Asset?
     @State private var showingAlbumInfo = false
     @State private var showingUploadQueue = false
     @State private var hasAppeared = false
-    @State private var pendingAssetId: String?
+    @State private var actionError: String?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
 
     init(album: DisplayAlbum) {
@@ -33,130 +34,144 @@ struct AlbumDetailView: View {
         _viewModel = StateObject(wrappedValue: AlbumDetailViewModel(album: album))
     }
 
-    private static let gridSpacing: CGFloat = 2
-    private static let headerHeight: CGFloat = 380
-
-    /// Adaptive column count: 3 on iPhone, 5 on iPad
-    private var columns: [GridItem] {
-        let count = horizontalSizeClass == .regular ? 5 : 3
-        return Array(repeating: GridItem(.flexible(), spacing: Self.gridSpacing), count: count)
-    }
-
-    // Nav bar title fades in as header title fades out
-    private var navBarOpacity: Double {
-        let fadeStart: CGFloat = 140
-        let fadeEnd: CGFloat = 200
-        if scrollOffset < fadeStart { return 0.0 }
-        if scrollOffset > fadeEnd { return 1.0 }
-        return Double((scrollOffset - fadeStart) / (fadeEnd - fadeStart))
-    }
-
-    private var navBarBackgroundOpacity: Double {
-        let fadeStart: CGFloat = 180
-        let fadeEnd: CGFloat = 220
-        if scrollOffset < fadeStart { return 0.0 }
-        if scrollOffset > fadeEnd { return 1.0 }
-        return Double((scrollOffset - fadeStart) / (fadeEnd - fadeStart))
-    }
-
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .top) {
-                mainContent(geometry: geometry)
-            }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(navBarBackgroundOpacity > 0.5 ? .visible : .hidden, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text(album.albumName)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .opacity(navBarOpacity)
-                    .scaleEffect(0.9 + (navBarOpacity * 0.1))
-                    .animation(.easeOut(duration: 0.15), value: navBarOpacity)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 16) {
-                    // Upload button (shows when uploads allowed or uploads exist)
-                    if viewModel.allowUpload || !uploadService.uploads(for: album.albumId).isEmpty {
+        mainContent
+            .navigationTitle(album.albumName)
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 16) {
+                        // Upload button (shows when uploads allowed or uploads exist)
+                        if viewModel.allowUpload || !uploadService.uploads(for: album.albumId).isEmpty {
+                            Button {
+                                showingUploadQueue = true
+                            } label: {
+                                UploadStatusIcon(uploadService: uploadService, albumId: album.albumId)
+                            }
+                        }
+
                         Button {
-                            showingUploadQueue = true
+                            Task { await viewModel.refresh() }
                         } label: {
-                            UploadStatusIcon(uploadService: uploadService, albumId: album.albumId)
+                            if viewModel.isLoading || viewModel.isRefreshing {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                        }
+                        .disabled(viewModel.isLoading || viewModel.isRefreshing)
+
+                        Button {
+                            showingAlbumInfo = true
+                        } label: {
+                            Image(systemName: "info.circle")
                         }
                     }
-
-                    Button {
-                        Task { await viewModel.refresh() }
-                    } label: {
-                        if viewModel.isLoading || viewModel.isRefreshing {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                    }
-                    .disabled(viewModel.isLoading || viewModel.isRefreshing)
-
-                    Button {
-                        showingAlbumInfo = true
-                    } label: {
-                        Image(systemName: "info.circle")
-                    }
                 }
             }
-        }
-        .sheet(isPresented: $showingAlbumInfo) {
-            AlbumInfoSheet(viewModel: viewModel)
-        }
-        .sheet(isPresented: $showingUploadQueue) {
-            UploadQueueSheet(uploadService: uploadService, album: album)
-        }
-        .task {
-            // Capture pending deep link asset before loading
-            if let target = deepLinkRouter.consumeTarget(), target.albumId == album.albumId {
-                pendingAssetId = target.assetId
+            .sheet(isPresented: $showingAlbumInfo) {
+                AlbumInfoSheet(viewModel: viewModel)
             }
-            await viewModel.loadIfNeeded()
-            // Auto-open lightbox if we arrived via deep link
-            if let assetId = pendingAssetId {
-                pendingAssetId = nil
-                if let index = viewModel.assets.firstIndex(where: { $0.id == assetId }) {
-                    lightboxSelection = LightboxSelection(id: index)
-                } else if !viewModel.assets.isEmpty {
-                    lightboxSelection = LightboxSelection(id: 0)
+            .sheet(isPresented: $showingUploadQueue) {
+                UploadQueueSheet(uploadService: uploadService, album: album)
+            }
+            .sheet(item: $detailsAsset, onDismiss: { grid.showInfo(false) }) { asset in
+                AssetDetailsSheet(asset: asset, viewModel: viewModel)
+                    .presentationDetents([.medium, .large])
+            }
+            .fullScreenCover(item: $lightboxSelection) { selection in
+                AssetLightboxView(
+                    assets: viewModel.assets,
+                    selectedIndex: selection.id,
+                    viewModel: viewModel,
+                    onDismiss: { lightboxSelection = nil }
+                )
+            }
+            .alert("Error", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+                Button("OK") { actionError = nil }
+            } message: {
+                Text(actionError ?? "")
+            }
+            .task {
+                let target = deepLinkRouter.consumeTarget()
+                await viewModel.loadIfNeeded()
+                // Deep link: open the asset (ScatterCore for photos, lightbox for videos)
+                if let target, target.albumId == album.albumId, let assetId = target.assetId {
+                    openAsset(id: assetId)
                 }
             }
-        }
-        .onAppear {
-            if hasAppeared {
-                // Refresh in background when view reappears (e.g., after upload)
-                Task {
-                    await viewModel.refresh()
+            .onAppear {
+                if hasAppeared {
+                    // Refresh in background when view reappears (e.g., after upload)
+                    Task { await viewModel.refresh() }
+                }
+                hasAppeared = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .uploadCompleted)) { notification in
+                // Refresh when an upload completes for this album
+                if let albumId = notification.userInfo?["albumId"] as? String,
+                   albumId == album.albumId {
+                    Task { await viewModel.refresh() }
                 }
             }
-            hasAppeared = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .uploadCompleted)) { notification in
-            // Refresh when an upload completes for this album
-            if let albumId = notification.userInfo?["albumId"] as? String,
-               albumId == album.albumId {
-                Task {
-                    await viewModel.refresh()
-                }
-            }
-        }
     }
 
     @ViewBuilder
-    private func mainContent(geometry: GeometryProxy) -> some View {
+    private var mainContent: some View {
         if let error = viewModel.errorMessage {
             errorView(error: error)
         } else if viewModel.assets.isEmpty && !viewModel.isLoading {
             emptyView
         } else {
-            photoGridContent(geometry: geometry)
+            VStack(spacing: 0) {
+                albumSummary
+                ScatterPhotoGrid(
+                    viewModel: viewModel,
+                    controller: grid,
+                    onVideo: openInLightbox,
+                    onInfo: { asset in
+                        detailsAsset = asset
+                        grid.showInfo(asset != nil)
+                    },
+                    onShare: { asset in Task { await share(asset) } },
+                    onSave: { asset in Task { await save(asset) } }
+                )
+            }
+            .overlay {
+                if viewModel.isLoading && viewModel.assets.isEmpty {
+                    loadingOverlay
+                }
+            }
+            .animation(.easeOut(duration: 0.3), value: viewModel.isLoading)
         }
+    }
+
+    /// Compact replacement for the old hero header: provider, count, date range, owner.
+    private var albumSummary: some View {
+        HStack(spacing: 8) {
+            ProviderBadge(provider: album.provider, size: 18)
+            Text(summaryText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer()
+            Button {
+                if let url = URL(string: viewModel.shareURL) { openURL(url) }
+            } label: {
+                Label("Open in Browser", systemImage: "link")
+                    .labelStyle(.iconOnly)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    private var summaryText: String {
+        var parts: [String] = []
+        if let count = album.assetCount { parts.append(count == 1 ? "1 Photo" : "\(count) Photos") }
+        if let range = viewModel.dateRangeText { parts.append(range) }
+        if let owner = viewModel.ownerName { parts.append("Shared by \(owner)") }
+        return parts.joined(separator: " · ")
     }
 
     private func errorView(error: String) -> some View {
@@ -180,232 +195,6 @@ struct AlbumDetailView: View {
         }
     }
 
-    private func photoGridContent(geometry: GeometryProxy) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: []) {
-                // Hero header
-                albumHeader(geometry: geometry)
-
-                // Photo grid
-                photoGrid
-                    .padding(.top, 2)
-            }
-            .background(
-                GeometryReader { proxy in
-                    Color.clear
-                        .preference(
-                            key: ScrollOffsetPreferenceKey.self,
-                            value: -proxy.frame(in: .named("scroll")).minY
-                        )
-                }
-            )
-        }
-        .coordinateSpace(name: "scroll")
-        .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
-            scrollOffset = value
-        }
-        .scrollIndicators(.hidden)
-        .ignoresSafeArea(.container, edges: .top)
-        .fullScreenCover(item: $lightboxSelection) { selection in
-            AssetLightboxView(
-                assets: viewModel.assets,
-                selectedIndex: selection.id,
-                viewModel: viewModel,
-                onDismiss: { lightboxSelection = nil }
-            )
-        }
-        .overlay {
-            if viewModel.isLoading && viewModel.assets.isEmpty {
-                loadingOverlay
-            }
-        }
-        .animation(.easeOut(duration: 0.3), value: viewModel.isLoading)
-    }
-
-    private func albumHeader(geometry: GeometryProxy) -> some View {
-        let headerWidth = geometry.size.width
-        let safeAreaTop = geometry.safeAreaInsets.top
-        let baseHeight = Self.headerHeight + safeAreaTop
-
-        // Parallax calculations
-        // When pulling down (scrollOffset < 0), stretch the header
-        // When scrolling up (scrollOffset > 0), parallax effect
-        let pullDown = max(0, -scrollOffset)
-        let scrollUp = max(0, scrollOffset)
-
-        // Header stretches when pulling down
-        let headerHeight = baseHeight + pullDown
-
-        // Parallax: image moves slower than scroll (creates depth effect)
-        let parallaxMultiplier: CGFloat = 0.5
-        let imageOffset = scrollUp * parallaxMultiplier
-
-        // Extra height for parallax movement room
-        let imageHeight = headerHeight + 150
-
-        return ZStack(alignment: .bottomLeading) {
-            // Hero image with parallax (high quality preview)
-            if let coverURL = viewModel.coverPreviewURL ?? viewModel.coverImageURL {
-                KFImage(coverURL)
-                    .placeholder {
-                        // Show thumbnail as placeholder while loading high-res
-                        if let thumbnailURL = AggregatorViewModel.thumbnailURL(for: album) {
-                            KFImage(thumbnailURL)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                        } else {
-                            Rectangle()
-                                .fill(Color(.systemGray5))
-                        }
-                    }
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: headerWidth, height: imageHeight)
-                    .offset(y: -imageOffset)
-                    .frame(width: headerWidth, height: headerHeight, alignment: .top)
-                    .clipped()
-            } else {
-                Rectangle()
-                    .fill(Color(.systemGray5))
-                    .frame(width: headerWidth, height: headerHeight)
-                    .overlay {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 60))
-                            .foregroundStyle(.tertiary)
-                    }
-            }
-
-            // Gradient overlay for text readability - top and bottom
-            ZStack {
-                // Top gradient for navigation bar visibility
-                LinearGradient(
-                    colors: [
-                        .black.opacity(0.4),
-                        .black.opacity(0.2),
-                        .clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .center
-                )
-
-                // Bottom gradient for album info visibility
-                LinearGradient(
-                    colors: [
-                        .clear,
-                        .clear,
-                        .black.opacity(0.2),
-                        .black.opacity(0.6)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-
-            // Album info overlay with fade and translate animation
-            VStack(alignment: .leading, spacing: 8) {
-                Text(album.albumName)
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 2)
-
-                // Owner info
-                if let ownerName = viewModel.ownerName {
-                    HStack(spacing: 6) {
-                        Image(systemName: "person.circle.fill")
-                            .font(.system(size: 14))
-                        Text("Shared by \(ownerName)")
-                            .font(.subheadline.weight(.medium))
-                    }
-                    .foregroundStyle(.white.opacity(0.95))
-                    .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 1)
-                }
-
-                // Provider badge and photo count / date range
-                HStack(spacing: 8) {
-                    ProviderBadge(provider: album.provider, size: 20)
-
-                    if let count = album.assetCount {
-                        Text(photoCountText(count))
-                            .font(.subheadline.weight(.medium))
-                    }
-
-                    if let dateRange = viewModel.dateRangeText {
-                        Text("•")
-                            .font(.caption)
-                        Text(dateRange)
-                            .font(.subheadline.weight(.medium))
-                    }
-                }
-                .foregroundStyle(.white.opacity(0.9))
-                .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 1)
-
-                // Share link button
-                Button {
-                    if let url = URL(string: viewModel.shareURL) {
-                        openURL(url)
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "link")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("Open in Browser")
-                            .font(.subheadline.weight(.medium))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.white.opacity(0.2), in: Capsule())
-                }
-                .padding(.top, 4)
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 24)
-            .opacity(titleOverlayOpacity)
-            .offset(y: titleOffset)
-        }
-        .frame(width: headerWidth, height: headerHeight)
-        .clipped()
-    }
-
-    // Title fades out and moves up as it transitions to nav bar
-    private var titleOverlayOpacity: Double {
-        let fadeStart: CGFloat = 80
-        let fadeEnd: CGFloat = 180
-        if scrollOffset < fadeStart { return 1.0 }
-        if scrollOffset > fadeEnd { return 0.0 }
-        return 1.0 - Double((scrollOffset - fadeStart) / (fadeEnd - fadeStart))
-    }
-
-    private var titleOffset: CGFloat {
-        let moveStart: CGFloat = 80
-        if scrollOffset < moveStart { return 0 }
-        // Move up as we scroll
-        return -(scrollOffset - moveStart) * 0.3
-    }
-
-    private var photoGrid: some View {
-        LazyVGrid(columns: columns, spacing: Self.gridSpacing) {
-            ForEach(viewModel.assets.indices, id: \.self) { index in
-                let asset = viewModel.assets[index]
-                Button {
-                    let generator = UIImpactFeedbackGenerator(style: .light)
-                    generator.impactOccurred()
-                    lightboxSelection = LightboxSelection(id: index)
-                } label: {
-                    PhotoGridCell(
-                        url: viewModel.thumbnailURL(for: asset),
-                        isVideo: asset.type == .video,
-                        duration: asset.duration
-                    )
-                }
-                .buttonStyle(PhotoGridButtonStyle())
-            }
-        }
-        .padding(.horizontal, Self.gridSpacing)
-        .padding(.bottom, 20)
-    }
-
     private var loadingOverlay: some View {
         VStack(spacing: 20) {
             ProgressView()
@@ -421,113 +210,55 @@ struct AlbumDetailView: View {
         .transition(.opacity.animation(.easeOut(duration: 0.3)))
     }
 
-    private func photoCountText(_ count: Int) -> String {
-        count == 1 ? "1 Photo" : "\(count) Photos"
-    }
-}
+    // MARK: - Opening
 
-// MARK: - Photo Grid Cell
-
-private struct PhotoGridCell: View {
-    let url: URL?
-    let isVideo: Bool
-    let duration: String?
-    var isSelecting: Bool = false
-    var isSelected: Bool = false
-
-    var body: some View {
-        Color.clear
-            .aspectRatio(1, contentMode: .fit)
-            .overlay {
-                CachedAsyncImage(url: url)
-            }
-            .clipped()
-            .contentShape(Rectangle())
-            .overlay(alignment: .bottomTrailing) {
-                if isVideo {
-                    videoBadge
-                }
-            }
-            .overlay(alignment: .topTrailing) {
-                if isSelecting {
-                    ZStack {
-                        Circle()
-                            .fill(isSelected ? Color.accentColor : Color.black.opacity(0.3))
-                            .frame(width: 26, height: 26)
-                        if isSelected {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.white)
-                        } else {
-                            Circle()
-                                .strokeBorder(.white, lineWidth: 2)
-                                .frame(width: 26, height: 26)
-                        }
-                    }
-                    .padding(6)
-                    .transition(.scale.combined(with: .opacity))
-                }
-            }
-            .overlay {
-                if isSelecting && isSelected {
-                    RoundedRectangle(cornerRadius: 0)
-                        .strokeBorder(Color.accentColor, lineWidth: 3)
-                }
-            }
+    private func openAsset(id: String) {
+        guard let asset = viewModel.assets.first(where: { $0.id == id }) else { return }
+        if asset.type == .video { openInLightbox(asset) } else { grid.open(id: id) }
     }
 
-    private var videoBadge: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "play.fill")
-                .font(.system(size: 8, weight: .semibold))
-            if let duration = duration, !duration.isEmpty, duration != "0:00:00" {
-                Text(formattedDuration(duration))
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
+    private func openInLightbox(_ asset: Asset) {
+        guard let index = viewModel.assets.firstIndex(where: { $0.id == asset.id }) else { return }
+        lightboxSelection = LightboxSelection(id: index)
+    }
+
+    // MARK: - Tile menu actions
+
+    /// Original bytes (decrypted for Ente), falling back to preview/thumbnail URLs.
+    private func originalFile(for asset: Asset) async throws -> URL {
+        let data: Data
+        if let decrypted = try await viewModel.loadImageData(for: asset, variant: .original) {
+            data = decrypted
+        } else {
+            guard let url = viewModel.originalURL(for: asset) ?? viewModel.previewURL(for: asset) ?? viewModel.thumbnailURL(for: asset) else {
+                throw URLError(.badURL)
             }
+            data = try await URLSession.shared.data(from: url).0
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(.black.opacity(0.6), in: Capsule())
-        .padding(6)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(asset.originalFileName)
+        try? FileManager.default.removeItem(at: file)
+        try data.write(to: file)
+        return file
     }
 
-    private func formattedDuration(_ duration: String) -> String {
-        // Duration comes as "H:MM:SS", convert to M:SS format (minutes and seconds only)
-        let parts = duration.split(separator: ":").compactMap { Int($0) }
-        guard parts.count >= 2 else { return duration }
-
-        if parts.count == 3 {
-            let hours = parts[0]
-            let minutes = parts[1]
-            let seconds = parts[2]
-            // Convert hours to minutes and add to minutes
-            let totalMinutes = hours * 60 + minutes
-            return String(format: "%d:%02d", totalMinutes, seconds)
-        } else if parts.count == 2 {
-            return String(format: "%d:%02d", parts[0], parts[1])
+    private func share(_ asset: Asset) async {
+        do {
+            ShareHelper.share(items: [try await originalFile(for: asset)])
+        } catch {
+            actionError = "Failed to load image: \(error.localizedDescription)"
         }
-        return duration
     }
-}
 
-// MARK: - Custom Button Style for Grid
-
-private struct PhotoGridButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
-            .brightness(configuration.isPressed ? -0.05 : 0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
-    }
-}
-
-// MARK: - Scroll Offset Preference Key
-
-private struct ScrollOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+    private func save(_ asset: Asset) async {
+        do {
+            let file = try await originalFile(for: asset)
+            defer { try? FileManager.default.removeItem(at: file) }
+            try await PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: file)
+            }
+        } catch {
+            actionError = "Failed to save: \(error.localizedDescription)"
+        }
     }
 }
 

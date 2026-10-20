@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import WidgetKit
+import ScatterCore
 
 @MainActor
 final class AlbumDetailViewModel: ObservableObject {
@@ -206,6 +207,11 @@ final class AlbumDetailViewModel: ObservableObject {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    /// Pixel provider for ScatterCore, bound to the current assets.
+    func tileContent() -> TileContentProvider {
+        ScatterTileLoader.content(provider: provider, album: album, assets: assets)
     }
 
     func thumbnailURL(for asset: Asset) -> URL? {
