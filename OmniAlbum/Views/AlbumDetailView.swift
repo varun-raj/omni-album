@@ -38,7 +38,7 @@ struct AlbumDetailView: View {
     var body: some View {
         mainContent
             .navigationTitle(album.albumName)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline) // the grid is its own scroll view, so a large title could never collapse
             .albumSubtitle(summaryText)
             .background(BarsFader(hidden: isViewing))
             .toolbar {
