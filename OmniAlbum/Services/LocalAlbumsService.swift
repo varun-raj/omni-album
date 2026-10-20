@@ -112,7 +112,7 @@ final class LocalAlbumsService {
     func saveAlbums(_ albums: [DisplayAlbum]) {
         // Preserve existing createdAt dates if available
         let existingAlbums = loadStoredAlbums()
-        let existingDates = Dictionary(uniqueKeysWithValues: existingAlbums.map { ($0.id, $0.createdAt) })
+        let existingDates = Dictionary(existingAlbums.map { ($0.id, $0.createdAt) }, uniquingKeysWith: { first, _ in first })
 
         let stored = albums.map { album in
             StoredAlbum(
@@ -148,18 +148,20 @@ final class LocalAlbumsService {
     }
 
     /// Merge CloudKit albums with local albums
-    /// Returns merged list with CloudKit as source of truth
+    /// CloudKit wins for albums in both; local-only albums are kept (their CloudKit save may have failed).
+    /// ponytail: no tombstones, so an album deleted on another device reappears here until deleted again.
     func mergeWithCloudKit(_ cloudKitAlbums: [DisplayAlbum]) -> [DisplayAlbum] {
         let localAlbums = loadStoredAlbums()
-        let localDates = Dictionary(uniqueKeysWithValues: localAlbums.map { ($0.id, $0.createdAt) })
+        let localDates = Dictionary(localAlbums.map { ($0.id, $0.createdAt) }, uniquingKeysWith: { first, _ in first })
 
         // Use CloudKit albums as source of truth, but preserve local creation dates
+        let cloudIds = Set(cloudKitAlbums.map(\.id))
         let merged = cloudKitAlbums.map { album in
             StoredAlbum(
                 from: album,
                 createdAt: localDates[album.id] ?? Date()
             )
-        }
+        } + localAlbums.filter { !cloudIds.contains($0.id) }
 
         // Sort by createdAt descending
         let sorted = merged.sorted { $0.createdAt > $1.createdAt }

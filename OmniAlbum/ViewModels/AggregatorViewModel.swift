@@ -169,6 +169,12 @@ final class AggregatorViewModel: ObservableObject {
         do {
             let cloudKitAlbums = try await cloudKitService.fetchAll()
 
+            // Push albums that never made it to CloudKit (offline add, failed save)
+            let cloudIds = Set(cloudKitAlbums.map(\.id))
+            for album in albums where !cloudIds.contains(album.id) {
+                try? await cloudKitService.save(album)
+            }
+
             // Merge CloudKit data with local (CloudKit is source of truth)
             let merged = localService.mergeWithCloudKit(cloudKitAlbums)
 

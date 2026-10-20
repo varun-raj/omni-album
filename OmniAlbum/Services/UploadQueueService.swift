@@ -227,6 +227,7 @@ final class UploadQueueService: ObservableObject {
                 isFirstUpload = false
             }
 
+            let failedTaskId = queue[nextIndex].id
             do {
                 let currentTask = queue[nextIndex]
                 let providerType = PhotoProvider(rawValue: currentTask.provider) ?? .immich
@@ -238,11 +239,12 @@ final class UploadQueueService: ObservableObject {
                     persistQueue()
                     continue
                 }
+                let taskId = currentTask.id
                 let assetId = try await taskProvider.uploadAsset(
                     task: currentTask
                 ) { [weak self] progress in
                     Task { @MainActor in
-                        self?.updateProgress(at: nextIndex, progress: progress)
+                        self?.updateProgress(id: taskId, progress: progress)
                         self?.updateActivityProgress(
                             progress,
                             currentFile: currentTask.fileName,
@@ -251,13 +253,15 @@ final class UploadQueueService: ObservableObject {
                     }
                 }
 
-                // Success
-                print("UploadQueue: Upload succeeded for \(queue[nextIndex].fileName), assetId: \(assetId)")
-                let completedTask = queue[nextIndex]
-                queue[nextIndex].status = .completed
-                queue[nextIndex].progress = 1.0
-                queue[nextIndex].uploadedAssetId = assetId
-                queue[nextIndex].completedAt = Date()
+                // Success. Task may have been removed while uploading; re-resolve by id.
+                print("UploadQueue: Upload succeeded for \(currentTask.fileName), assetId: \(assetId)")
+                if let index = queue.firstIndex(where: { $0.id == taskId }) {
+                    queue[index].status = .completed
+                    queue[index].progress = 1.0
+                    queue[index].uploadedAssetId = assetId
+                    queue[index].completedAt = Date()
+                }
+                let completedTask = currentTask
                 activeUpload = nil
                 persistQueue()
 
@@ -269,11 +273,14 @@ final class UploadQueueService: ObservableObject {
                 )
 
             } catch {
-                // Failed
-                print("UploadQueue: Upload failed for \(queue[nextIndex].fileName): \(error.localizedDescription)")
-                queue[nextIndex].status = .failed
-                queue[nextIndex].errorMessage = error.localizedDescription
-                queue[nextIndex].completedAt = Date()
+                // Cancelled by pauseAll: it already reset the task to pending.
+                if Task.isCancelled { return }
+                print("UploadQueue: Upload failed for \(failedTaskId): \(error.localizedDescription)")
+                if let index = queue.firstIndex(where: { $0.id == failedTaskId }) {
+                    queue[index].status = .failed
+                    queue[index].errorMessage = error.localizedDescription
+                    queue[index].completedAt = Date()
+                }
                 activeUpload = nil
                 persistQueue()
             }
@@ -283,8 +290,8 @@ final class UploadQueueService: ObservableObject {
         endActivityIfNeeded()
     }
 
-    private func updateProgress(at index: Int, progress: Double) {
-        guard index < queue.count else { return }
+    private func updateProgress(id: UUID, progress: Double) {
+        guard let index = queue.firstIndex(where: { $0.id == id }) else { return }
         queue[index].progress = progress
         if let active = activeUpload, active.id == queue[index].id {
             activeUpload = queue[index]
