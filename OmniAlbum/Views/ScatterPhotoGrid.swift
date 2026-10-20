@@ -9,7 +9,6 @@
 
 import SwiftUI
 import ImageIO
-import ScatterCore
 import Kingfisher
 
 struct ScatterPhotoGrid: View {
@@ -22,6 +21,7 @@ struct ScatterPhotoGrid: View {
     let onSave: (Asset) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var assetsByID: [String: Asset] {
         Dictionary(viewModel.assets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -33,7 +33,7 @@ struct ScatterPhotoGrid: View {
             let isVideo = asset.type == .video
             return ScatterItem(
                 id: asset.id,
-                aspect: size.map { $0.width / $0.height } ?? 1,
+                aspect: size.map { $0.width / $0.height } ?? 1, // opened tile keeps the real shape; the grid is squares (config.columns)
                 title: asset.originalFileName,
                 // `external` tiles call onActivate instead of staging: videos need AVPlayer, not a still.
                 subtitle: isVideo ? Self.durationText(asset.duration) : "",
@@ -45,9 +45,10 @@ struct ScatterPhotoGrid: View {
 
     private var config: ScatterConfig {
         var c = ScatterConfig()
-        c.rowHeight = 110
+        c.columns = horizontalSizeClass == .regular ? 6 : 3
         c.gap = 2
-        c.cornerRadius = 2
+        c.edgeInset = 0 // edge to edge
+        c.cornerRadius = 0
         // Resolve for the current appearance; colorScheme is read above so a change re-runs body.
         c.background = UIColor.systemBackground
             .resolvedColor(with: UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)).cgColor

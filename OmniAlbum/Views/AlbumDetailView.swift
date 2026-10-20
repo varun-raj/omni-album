@@ -8,7 +8,6 @@
 
 import SwiftUI
 import Photos
-import ScatterCore
 
 private struct LightboxSelection: Identifiable {
     let id: Int

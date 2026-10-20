@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		8B226ED72F34450800F07346 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 8B226E012F3341A500F07346 /* Kingfisher */; };
-		8B22700A2F40000000F07346 /* ScatterCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8B22700B2F40000000F07346 /* ScatterCore */; };
 		8B226F0E2F34560100F07346 /* UploadWidgetExtension.appex in Embed Extensions */ = {isa = PBXBuildFile; fileRef = 8B226F012F34560100F07346 /* UploadWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		8B226F222F34570000F07346 /* Sodium in Frameworks */ = {isa = PBXBuildFile; productRef = 8B226F212F34570000F07346 /* Sodium */; };
 /* End PBXBuildFile section */
@@ -84,7 +83,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				8B226ED72F34450800F07346 /* Kingfisher in Frameworks */,
-				8B22700A2F40000000F07346 /* ScatterCore in Frameworks */,
 				8B226F222F34570000F07346 /* Sodium in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -140,7 +138,6 @@
 			name = OmniAlbum;
 			packageProductDependencies = (
 				8B226E012F3341A500F07346 /* Kingfisher */,
-				8B22700B2F40000000F07346 /* ScatterCore */,
 				8B226F212F34570000F07346 /* Sodium */,
 			);
 			productName = OmniAlbum;
@@ -196,7 +193,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				8B226E002F3341A500F07346 /* XCRemoteSwiftPackageReference "Kingfisher" */,
-				8B22700C2F40000000F07346 /* XCRemoteSwiftPackageReference "ScatterCore" */,
 				8B226F202F34570000F07346 /* XCRemoteSwiftPackageReference "swift-sodium" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -565,14 +561,6 @@
 				minimumVersion = 0.9.1;
 			};
 		};
-		8B22700C2F40000000F07346 /* XCRemoteSwiftPackageReference "ScatterCore" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/skcript/ScatterCore";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.7.4;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -585,11 +573,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 8B226F202F34570000F07346 /* XCRemoteSwiftPackageReference "swift-sodium" */;
 			productName = Sodium;
-		};
-		8B22700B2F40000000F07346 /* ScatterCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 8B22700C2F40000000F07346 /* XCRemoteSwiftPackageReference "ScatterCore" */;
-			productName = ScatterCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -8,7 +8,6 @@
 import Foundation
 import Combine
 import WidgetKit
-import ScatterCore
 
 @MainActor
 final class AlbumDetailViewModel: ObservableObject {

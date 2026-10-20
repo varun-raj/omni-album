@@ -1,33 +1,24 @@
 {
-  "originHash" : "74df38bd68856f6799091a7cf2401adff2502d74b818051d399df5429c6259d6",
-  "pins" : [
+  "originHash": "74df38bd68856f6799091a7cf2401adff2502d74b818051d399df5429c6259d6",
+  "pins": [
     {
-      "identity" : "kingfisher",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/onevcat/Kingfisher.git",
-      "state" : {
-        "revision" : "d30a5fad881137e2267f96a8e3fc35c58999bb94",
-        "version" : "8.6.2"
+      "identity": "kingfisher",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/onevcat/Kingfisher.git",
+      "state": {
+        "revision": "d30a5fad881137e2267f96a8e3fc35c58999bb94",
+        "version": "8.6.2"
       }
     },
     {
-      "identity" : "scattercore",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/skcript/ScatterCore",
-      "state" : {
-        "revision" : "99c4bd038f7524fe5cf1a946e4a7d28526a76b50",
-        "version" : "0.7.4"
-      }
-    },
-    {
-      "identity" : "swift-sodium",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/jedisct1/swift-sodium.git",
-      "state" : {
-        "revision" : "e7e799cd1eaa4d0f6d3eab56832e7f4b377f4a4f",
-        "version" : "0.10.0"
+      "identity": "swift-sodium",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/jedisct1/swift-sodium.git",
+      "state": {
+        "revision": "e7e799cd1eaa4d0f6d3eab56832e7f4b377f4a4f",
+        "version": "0.10.0"
       }
     }
   ],
-  "version" : 3
+  "version": 3
 }
