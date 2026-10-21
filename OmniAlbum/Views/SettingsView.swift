@@ -92,6 +92,19 @@ struct SettingsView: View {
                     }
                 }
 
+                // Account (beta)
+                Section {
+                    NavigationLink {
+                        ImmichAccountView()
+                    } label: {
+                        SettingsLabel("Immich Account", symbol: "person.crop.circle", color: .purple)
+                    }
+                } header: {
+                    Text("Beta")
+                } footer: {
+                    Text("Sign in to an Immich server and browse your whole library, synced to this device.")
+                }
+
                 // Data Section
                 Section {
                     Button {

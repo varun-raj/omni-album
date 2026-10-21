@@ -25,6 +25,7 @@ enum Formatters {
     static let dayLong = pattern("EEEE, d MMMM yyyy")
     static let time = pattern("HH:mm")
     static let fileDate = pattern("yyyy-MM-dd")
+    static let monthTitle = pattern("LLLL yyyy")
 
     private static func pattern(_ p: String) -> DateFormatter {
         let f = DateFormatter()

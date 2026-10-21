@@ -75,6 +75,9 @@ enum ImageCacheConfig {
     static let cacheExpirationDays = 30
 
     static func configure() {
+        // Account images carry the bearer token (account server only)
+        KingfisherManager.shared.defaultOptions = [.requestModifier(ImmichAccountSession.requestModifier)]
+
         // Configure memory cache
         ImageCache.default.memoryStorage.config.totalCostLimit = Int(memoryCacheLimit)
         ImageCache.default.memoryStorage.config.countLimit = memoryCacheCountLimit

@@ -14,6 +14,7 @@
 		8B226F0E2F34560100F07346 /* UploadWidgetExtension.appex in Embed Extensions */ = {isa = PBXBuildFile; fileRef = 8B226F012F34560100F07346 /* UploadWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		8B226F222F34570000F07346 /* Sodium in Frameworks */ = {isa = PBXBuildFile; productRef = 8B226F212F34570000F07346 /* Sodium */; };
 		CF4E2356A44DAC00EE14EA35 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C3105B76F9FBA9CA958E1C2 /* Foundation.framework */; };
+		D3731AE386C86B982DD1F436 /* ImmichSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9DAA4C9507D36867F37F1F /* ImmichSyncTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -49,6 +50,7 @@
 
 /* Begin PBXFileReference section */
 		1C3105B76F9FBA9CA958E1C2 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		2A9DAA4C9507D36867F37F1F /* ImmichSyncTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImmichSyncTests.swift; sourceTree = "<group>"; };
 		49133CD7FE82DCCAF357A89F /* AlbumCSVTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AlbumCSVTests.swift; sourceTree = "<group>"; };
 		5EA704F102A872B045EC3ACC /* ServerBaseURLTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ServerBaseURLTests.swift; sourceTree = "<group>"; };
 		717E3B99FB165C32E7F7DCF6 /* LocalAlbumsServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalAlbumsServiceTests.swift; sourceTree = "<group>"; };
@@ -164,6 +166,7 @@
 				49133CD7FE82DCCAF357A89F /* AlbumCSVTests.swift */,
 				717E3B99FB165C32E7F7DCF6 /* LocalAlbumsServiceTests.swift */,
 				5EA704F102A872B045EC3ACC /* ServerBaseURLTests.swift */,
+				2A9DAA4C9507D36867F37F1F /* ImmichSyncTests.swift */,
 			);
 			name = OmniAlbumTests;
 			path = OmniAlbumTests;
@@ -311,6 +314,7 @@
 				459F7E98604FAB2D61A909DD /* AlbumCSVTests.swift in Sources */,
 				85406AA8108321EC12C17F87 /* LocalAlbumsServiceTests.swift in Sources */,
 				34491903D3EC57282DE66B47 /* ServerBaseURLTests.swift in Sources */,
+				D3731AE386C86B982DD1F436 /* ImmichSyncTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
