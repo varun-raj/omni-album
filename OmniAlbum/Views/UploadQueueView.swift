@@ -7,30 +7,51 @@
 
 import SwiftUI
 
+// MARK: - Shared queue pieces (Settings > Upload Queue, and the Upload tab)
+
+/// The queue grouped by status, as List sections.
+struct UploadQueueSections: View {
+    @ObservedObject var uploadService: UploadQueueService
+
+    private var groupedUploads: [(String, [UploadTask])] {
+        let grouped = Dictionary(grouping: uploadService.queue) { $0.status }
+        return [("Uploading", UploadStatus.uploading), ("Pending", .pending), ("Failed", .failed), ("Completed", .completed)]
+            .compactMap { title, status in grouped[status].flatMap { $0.isEmpty ? nil : (title, $0) } }
+    }
+
+    var body: some View {
+        ForEach(groupedUploads, id: \.0) { section, tasks in
+            Section(section) {
+                ForEach(tasks) { UploadQueueTaskRow(uploadTask: $0) }
+            }
+        }
+    }
+}
+
+/// Retry failed / clear completed / clear all.
+struct UploadQueueMenu: View {
+    @ObservedObject var uploadService: UploadQueueService
+
+    var body: some View {
+        Menu {
+            if uploadService.failedCount > 0 {
+                Button { uploadService.retryFailed() } label: { Label("Retry Failed", systemImage: "arrow.clockwise") }
+            }
+            if uploadService.queue.contains(where: { $0.status == .completed }) {
+                Button { uploadService.clearCompleted() } label: { Label("Clear Completed", systemImage: "checkmark.circle") }
+            }
+            Divider()
+            Button(role: .destructive) { uploadService.clearAll() } label: { Label("Clear All", systemImage: "trash") }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+    }
+}
+
 // MARK: - Upload Queue View (Full Page)
 
 struct UploadQueueView: View {
     @ObservedObject private var uploadService = UploadQueueService.shared
-
-    private var groupedUploads: [(String, [UploadTask])] {
-        let grouped = Dictionary(grouping: uploadService.queue) { $0.status }
-        var result: [(String, [UploadTask])] = []
-
-        if let uploading = grouped[.uploading], !uploading.isEmpty {
-            result.append(("Uploading", uploading))
-        }
-        if let pending = grouped[.pending], !pending.isEmpty {
-            result.append(("Pending", pending))
-        }
-        if let failed = grouped[.failed], !failed.isEmpty {
-            result.append(("Failed", failed))
-        }
-        if let completed = grouped[.completed], !completed.isEmpty {
-            result.append(("Completed", completed))
-        }
-
-        return result
-    }
 
     var body: some View {
         Group {
@@ -41,50 +62,14 @@ struct UploadQueueView: View {
                     Text("Photos you upload will appear here.")
                 }
             } else {
-                List {
-                    ForEach(groupedUploads, id: \.0) { section, tasks in
-                        Section(section) {
-                            ForEach(tasks) { uploadTask in
-                                UploadQueueTaskRow(uploadTask: uploadTask)
-                            }
-                        }
-                    }
-                }
+                List { UploadQueueSections(uploadService: uploadService) }
             }
         }
         .navigationTitle("Upload Queue")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if !uploadService.queue.isEmpty {
-                    Menu {
-                        if uploadService.failedCount > 0 {
-                            Button {
-                                uploadService.retryFailed()
-                            } label: {
-                                Label("Retry Failed", systemImage: "arrow.clockwise")
-                            }
-                        }
-
-                        if uploadService.queue.contains(where: { $0.status == .completed }) {
-                            Button {
-                                uploadService.clearCompleted()
-                            } label: {
-                                Label("Clear Completed", systemImage: "checkmark.circle")
-                            }
-                        }
-
-                        Divider()
-
-                        Button(role: .destructive) {
-                            uploadService.clearAll()
-                        } label: {
-                            Label("Clear All", systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                }
+                if !uploadService.queue.isEmpty { UploadQueueMenu(uploadService: uploadService) }
             }
         }
     }

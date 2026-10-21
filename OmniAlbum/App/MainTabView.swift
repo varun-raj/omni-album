@@ -10,6 +10,7 @@ import SwiftUI
 struct MainTabView: View {
     @EnvironmentObject private var networkMonitor: NetworkMonitor
     @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
+    @ObservedObject private var uploadService = UploadQueueService.shared
 
     var body: some View {
         bodyContent
@@ -28,6 +29,13 @@ struct MainTabView: View {
                         Label("Albums", systemImage: "photo.on.rectangle.angled")
                     }
                     .tag(0)
+
+                UploadTabView()
+                    .tabItem {
+                        Label("Upload", systemImage: "arrow.up.circle")
+                    }
+                    .badge(uploadService.pendingCount)
+                    .tag(2)
 
                 SettingsView()
                     .tabItem {

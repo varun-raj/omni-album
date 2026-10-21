@@ -526,3 +526,47 @@ final class ImmichAccountUploadTests: XCTestCase {
         XCTAssertNil(old.targetAlbumId)
     }
 }
+
+// MARK: - Upload tab targets
+
+final class UploadTargetTests: XCTestCase {
+    private func account(_ user: String) -> ImmichAccountInfo { ImmichAccountInfo(server: "https://\(user).test", email: "\(user)@x", userId: user) }
+
+    private func album(_ account: ImmichAccountInfo, _ id: String, _ name: String, items: Int = 3) -> AccountAlbum {
+        AccountAlbum(account: account, album: LibraryAlbum(id: id, name: name, description: "", thumbnailAssetId: nil, updatedAt: "2024", assetCount: items))
+    }
+
+    private func link(_ id: String, _ name: String, upload: Bool) -> DisplayAlbum {
+        DisplayAlbum(id: id, albumName: name, albumThumbnailAssetId: nil, baseURL: "https://share.test", shareKey: "k", albumId: id, assetCount: 1, allowUpload: upload)
+    }
+
+    func testEachAccountGetsLibraryThenItsAlbumsSortedByName() {
+        let a = account("alice"), b = account("bob")
+        let targets = UploadTarget.build(accounts: [a, b],
+                                         albums: [album(a, "2", "Zoo"), album(b, "9", "Bob's"), album(a, "1", "Apples")],
+                                         shareLinkAlbums: [])
+        XCTAssertEqual(targets.map(\.title), ["Library", "Apples", "Zoo", "Library", "Bob's"])
+        XCTAssertEqual(targets.map(\.kind), [.immichLibrary, .immichAlbum, .immichAlbum, .immichLibrary, .immichAlbum])
+        XCTAssertEqual(Set(targets.map(\.id)).count, targets.count)
+    }
+
+    func testOnlyUploadableSharedLinksAreOffered() {
+        let targets = UploadTarget.build(accounts: [], albums: [], shareLinkAlbums: [link("1", "Open", upload: true), link("2", "ReadOnly", upload: false)])
+        XCTAssertEqual(targets.map(\.title), ["Open"])
+        XCTAssertEqual(targets.first?.group, "Shared links")
+    }
+
+    func testTargetsProduceTasksForTheirDestination() {
+        let a = account("alice")
+        let targets = UploadTarget.build(accounts: [a], albums: [album(a, "al1", "Trip")], shareLinkAlbums: [link("L", "Link", upload: true)])
+        let picked = SelectedAsset(localIdentifier: "x", fileName: "f.jpg", fileSize: 1, thumbnail: nil)
+        let tasks = targets.map { $0.destination.makeTask(picked) }
+        XCTAssertEqual(tasks[0].accountID, a.id); XCTAssertNil(tasks[0].targetAlbumId)       // library
+        XCTAssertEqual(tasks[1].targetAlbumId, "al1")                                        // album
+        XCTAssertNil(tasks[2].accountID); XCTAssertEqual(tasks[2].shareKey, "k")             // shared link keeps its key
+    }
+
+    func testNothingToUploadToWhenSignedOutAndNoLinks() {
+        XCTAssertTrue(UploadTarget.build(accounts: [], albums: [], shareLinkAlbums: []).isEmpty)
+    }
+}
