@@ -186,8 +186,21 @@ final class ImmichAccountViewModel: ObservableObject {
     }
 
     /// Everything the viewer pages through, newest first.
-    func timelineAssets(favoritesOnly: Bool = false) async -> [Asset] {
-        ((try? await store?.timelineAssets(favoritesOnly: favoritesOnly)) ?? []).map(\.asAsset)
+    func timelineAssets(favoritesOnly: Bool = false, limit: Int? = nil) async -> [Asset] {
+        ((try? await store?.timelineAssets(favoritesOnly: favoritesOnly, limit: limit)) ?? []).map(\.asAsset)
+    }
+
+    /// What the viewer pages through when a photo is opened from the timeline: its month and the months on
+    /// either side. (A real library is hundreds of thousands of photos; loading all of them per tap is too heavy.)
+    func viewerAssets(around tapped: LibraryAsset) async -> (assets: [Asset], index: Int)? {
+        let month = String(tapped.localDateTime.prefix(7))
+        guard let at = months.firstIndex(where: { $0.month == month }) else { return nil }
+        var all: [Asset] = []
+        for bucket in months[max(0, at - 1)...min(months.count - 1, at + 1)] {
+            all += await assets(inMonth: bucket.month).map(\.asAsset)
+        }
+        guard let index = all.firstIndex(where: { $0.id == tapped.id }) else { return nil }
+        return (all, index)
     }
 
     func albumAssets(_ albumId: String) async -> [Asset] {

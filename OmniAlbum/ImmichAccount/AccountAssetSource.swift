@@ -28,8 +28,11 @@ final class AccountAssetSource: AssetSource {
     func originalURL(for asset: Asset) -> URL? { client.originalURL(assetId: asset.id) }
     func videoPlaybackURL(for asset: Asset) -> URL? { client.videoPlaybackURL(assetId: asset.id) }
 
+    /// From the local database if it was synced, otherwise fetched from the server for this one asset.
     func exif(for asset: Asset) async -> AssetExif? {
-        guard let e = try? await store.exif(assetId: asset.id) else { return nil }
+        guard let e = try? await store.exif(assetId: asset.id) else {
+            return try? await client.fetchExif(assetId: asset.id)
+        }
         return AssetExif(make: e.make, model: e.model, fNumber: e.fNumber, focalLength: e.focalLength, iso: e.iso,
                          exposureTime: e.exposureTime, width: e.exifImageWidth, height: e.exifImageHeight,
                          fileSizeInBytes: e.fileSizeInByte.map(Int64.init), latitude: e.latitude, longitude: e.longitude,

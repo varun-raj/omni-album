@@ -89,6 +89,21 @@ struct ImmichAccountClient: Sendable {
         }
     }
 
+    /// EXIF for one asset (GET /api/assets/{id}); nil if the server has none.
+    func fetchExif(assetId: String) async throws -> AssetExif? {
+        let (data, response) = try await session.data(for: try request("/api/assets/\(assetId)"))
+        try Self.check(response, data: data)
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let e = root["exifInfo"] as? [String: Any] else { return nil }
+        func num(_ k: String) -> Double? { (e[k] as? NSNumber)?.doubleValue }
+        return AssetExif(make: e["make"] as? String, model: e["model"] as? String, fNumber: num("fNumber"), focalLength: num("focalLength"),
+                         iso: num("iso").map(Int.init), exposureTime: e["exposureTime"] as? String,
+                         width: num("exifImageWidth").map(Int.init), height: num("exifImageHeight").map(Int.init),
+                         fileSizeInBytes: num("fileSizeInByte").map(Int64.init), latitude: num("latitude"), longitude: num("longitude"),
+                         city: e["city"] as? String, state: e["state"] as? String, country: e["country"] as? String,
+                         lensModel: e["lensModel"] as? String, orientation: e["orientation"] as? String, description: e["description"] as? String)
+    }
+
     // MARK: Image URLs (loaded with `authHeaders`, namespaced by `cacheScope`)
 
     var authHeaders: [String: String] { ["Authorization": "Bearer \(credentials.token)"] }

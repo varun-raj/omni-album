@@ -259,17 +259,17 @@ private struct AccountTimeline: View {
 
     // MARK: Opening
 
-    /// Pages through the entire timeline, starting at the tapped photo.
+    /// Pages through the tapped photo's month and its neighbours.
     private func openTimeline(_ tapped: LibraryAsset) {
         Task {
-            let all = await viewModel.timelineAssets()
-            guard let index = all.firstIndex(where: { $0.id == tapped.id }) else { return }
+            guard let (all, index) = await viewModel.viewerAssets(around: tapped) else { return }
             viewer = ViewerSelection(assets: all, index: index)
         }
     }
 
+    /// The newest 1,000 photos.
     private func playSlideshow() async {
-        let all = await viewModel.timelineAssets()
+        let all = await viewModel.timelineAssets(limit: 1000)
         guard all.count > 1 else { return }
         viewer = ViewerSelection(assets: all, index: 0, slideshow: true)
     }

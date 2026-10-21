@@ -177,12 +177,12 @@ actor LibraryStore {
     }
 
     /// The whole timeline, newest first: what the viewer pages through.
-    func timelineAssets(favoritesOnly: Bool = false) throws -> [LibraryAsset] {
+    func timelineAssets(favoritesOnly: Bool = false, limit: Int? = nil) throws -> [LibraryAsset] {
         let stmt = try db.prepare(Self.assetSelect + """
             WHERE visibility = 'timeline' AND deletedAt IS NULL AND localDateTime IS NOT NULL
             """ + (favoritesOnly ? " AND isFavorite = 1 " : " ") + """
             ORDER BY localDateTime DESC
-            """)
+            """ + (limit.map { " LIMIT \($0)" } ?? ""))
         stmt.bind([])
         return Self.rows(stmt)
     }

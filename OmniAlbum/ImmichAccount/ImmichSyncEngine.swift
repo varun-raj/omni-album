@@ -30,18 +30,25 @@ struct SyncSummary: Sendable {
 }
 
 actor ImmichSyncEngine {
-    /// What we mirror: own assets + EXIF, albums and their membership, and the assets/EXIF of shared albums.
-    static let requestTypes = ["AssetsV2", "AssetExifsV1", "AlbumsV2", "AlbumToAssetsV1", "AlbumAssetsV2", "AlbumAssetExifsV1"]
+    /// What we mirror: own assets, albums and their membership, and the assets of shared albums.
+    /// EXIF is left out: on a real 320k-photo library it was ~40% of the stream, and it's only read when a
+    /// photo's details open (fetched then, see AccountAssetSource.exif). `includeExif` brings it back.
+    static let baseRequestTypes = ["AssetsV2", "AlbumsV2", "AlbumToAssetsV1", "AlbumAssetsV2"]
+    static let exifRequestTypes = ["AssetExifsV1", "AlbumAssetExifsV1"]
+    static let batchSizeDefault = 1000
+    static var requestTypes: [String] { baseRequestTypes }
     static let batchSize = 1000
 
     private let client: ImmichAccountClient
     private let store: LibraryStore
+    private let includeExif: Bool
     private let log = Logger(subsystem: "com.skcript.omnialbum", category: "immich-sync")
     private let decoder = JSONDecoder()
 
-    init(client: ImmichAccountClient, store: LibraryStore) {
+    init(client: ImmichAccountClient, store: LibraryStore, includeExif: Bool = false) {
         self.client = client
         self.store = store
+        self.includeExif = includeExif
     }
 
     func sync(onProgress: @escaping @Sendable (SyncProgress) -> Void = { _ in }) async throws -> SyncSummary {
@@ -75,7 +82,7 @@ actor ImmichSyncEngine {
     }
 
     private func runStream(progress: inout SyncProgress, onProgress: @escaping @Sendable (SyncProgress) -> Void) async throws -> Outcome {
-        let request = try client.request("/api/sync/stream", method: "POST", json: ["types": Self.requestTypes])
+        let request = try client.request("/api/sync/stream", method: "POST", json: ["types": includeExif ? Self.baseRequestTypes + Self.exifRequestTypes : Self.baseRequestTypes])
         let (bytes, response) = try await client.session.bytes(for: request)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             var body = ""
