@@ -38,18 +38,42 @@ enum ImmichUploadError: LocalizedError {
 }
 
 /// How a request to the server is authorised: a share link's key, or a signed-in account's session token.
-private enum UploadAuth {
+enum UploadAuth {
     case shareLink(key: String, password: String?)
     case bearer(token: String)
 
     var isAccount: Bool { if case .bearer = self { return true } else { return false } }
 }
 
+/// What the server is told about a photo besides its bytes. Separate from PHAsset so the request can be tested.
+struct UploadMetadata {
+    let createdAt: Date
+    let modifiedAt: Date
+    let isFavorite: Bool
+    let isVideo: Bool
+    let durationSeconds: Double
+
+    init(createdAt: Date, modifiedAt: Date? = nil, isFavorite: Bool = false, isVideo: Bool = false, durationSeconds: Double = 0) {
+        self.createdAt = createdAt
+        self.modifiedAt = modifiedAt ?? createdAt
+        self.isFavorite = isFavorite
+        self.isVideo = isVideo
+        self.durationSeconds = durationSeconds
+    }
+
+    init(_ asset: PHAsset) {
+        self.init(createdAt: asset.creationDate ?? Date(), modifiedAt: asset.modificationDate, isFavorite: asset.isFavorite,
+                  isVideo: asset.mediaType == .video, durationSeconds: asset.duration)
+    }
+}
+
 final class ImmichUploadService {
     private let session: URLSession
 
-    init() {
+    /// `protocolClasses` lets tests stand in for the server.
+    init(protocolClasses: [AnyClass]? = nil) {
         let config = URLSessionConfiguration.default
+        if let protocolClasses { config.protocolClasses = protocolClasses }
         config.timeoutIntervalForRequest = 60
         config.timeoutIntervalForResource = 600  // 10 minutes for large files
         self.session = URLSession(configuration: config)
@@ -100,7 +124,7 @@ final class ImmichUploadService {
             assetFile: exported.url,
             fileName: task.fileName,
             mimeType: exported.mimeType,
-            asset: asset,
+            metadata: UploadMetadata(asset),
             deviceAssetId: task.localAssetIdentifier,
             durationInMilliseconds: auth.isAccount
         )
@@ -159,7 +183,7 @@ final class ImmichUploadService {
     }
 
     /// Add an asset to an album
-    private func addAssetToAlbum(
+    func addAssetToAlbum(
         assetId: String,
         albumId: String,
         baseURL: String,
@@ -192,7 +216,7 @@ final class ImmichUploadService {
         }
     }
 
-    private func buildUploadURL(baseURL: String, auth: UploadAuth) -> URL {
+    func buildUploadURL(baseURL: String, auth: UploadAuth) -> URL {
         var components = URLComponents(string: baseURL)!
         components.path += "/api/assets"
         components.queryItems = queryItems(for: auth)
@@ -215,12 +239,12 @@ final class ImmichUploadService {
         return items
     }
 
-    private func apply(_ auth: UploadAuth, to request: inout URLRequest) {
+    func apply(_ auth: UploadAuth, to request: inout URLRequest) {
         if case .bearer(let token) = auth { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
     }
 
     /// SHA-1 of a file, base64 (what Immich stores and compares), streamed so big videos aren't loaded.
-    private func sha1Base64(of url: URL) throws -> String {
+    func sha1Base64(of url: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         var hasher = Insecure.SHA1()
@@ -229,12 +253,12 @@ final class ImmichUploadService {
     }
 
     /// Writes the multipart body to a temp file, copying the asset in 1 MB chunks.
-    private func buildMultipartFile(
+    func buildMultipartFile(
         boundary: String,
         assetFile: URL,
         fileName: String,
         mimeType: String,
-        asset: PHAsset,
+        metadata: UploadMetadata,
         deviceAssetId: String,
         durationInMilliseconds: Bool = false
     ) throws -> URL {
@@ -262,13 +286,13 @@ final class ImmichUploadService {
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
-        let createdAt = asset.creationDate ?? Date()
+        let createdAt = metadata.createdAt
         appendString("--\(boundary)\(crlf)")
         appendString("Content-Disposition: form-data; name=\"fileCreatedAt\"\(crlf)\(crlf)")
         appendString("\(isoFormatter.string(from: createdAt))\(crlf)")
 
         // fileModifiedAt
-        let modifiedAt = asset.modificationDate ?? createdAt
+        let modifiedAt = metadata.modifiedAt
         appendString("--\(boundary)\(crlf)")
         appendString("Content-Disposition: form-data; name=\"fileModifiedAt\"\(crlf)\(crlf)")
         appendString("\(isoFormatter.string(from: modifiedAt))\(crlf)")
@@ -276,14 +300,14 @@ final class ImmichUploadService {
         // isFavorite
         appendString("--\(boundary)\(crlf)")
         appendString("Content-Disposition: form-data; name=\"isFavorite\"\(crlf)\(crlf)")
-        appendString("\(asset.isFavorite)\(crlf)")
+        appendString("\(metadata.isFavorite)\(crlf)")
 
         // duration (for videos)
-        if asset.mediaType == .video {
+        if metadata.isVideo {
             appendString("--\(boundary)\(crlf)")
             appendString("Content-Disposition: form-data; name=\"duration\"\(crlf)\(crlf)")
             // Immich 3 takes whole milliseconds; older servers a seconds value.
-            appendString("\(durationInMilliseconds ? String(Int(asset.duration * 1000)) : "\(asset.duration)")\(crlf)")
+            appendString("\(durationInMilliseconds ? String(Int(metadata.durationSeconds * 1000)) : "\(metadata.durationSeconds)")\(crlf)")
         }
 
         // assetData (the actual file)

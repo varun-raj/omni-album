@@ -48,8 +48,16 @@ Each service implements `ShareLinkProvider` (parse link, fetch info/detail, buil
 - Loading states use `Shimmer` skeletons (`SkeletonPhotoGrid`, `SkeletonAlbumGrid`).
 - `CachedAsyncImage` (Kingfisher) downsamples to `maxPixel` (default 512).
 
+### Immich accounts (`OmniAlbum/ImmichAccount`)
+Besides share links, the app can sign in to Immich servers (several accounts at once). **Sync needs a session, so sign-in is email + password; API keys can't use `/sync`.**
+- `ImmichAccountSession`: accounts (UserDefaults) + one session token each (Keychain); `ImmichAccountInfo.id = "server|userId"`.
+- `ImmichSyncEngine` streams `POST /api/sync/stream` (JSON lines), stores each batch in `LibraryStore` (system SQLite, one file per account, excluded from backup) and only then acks. A reset line wipes and restarts. EXIF is not synced (fetched per photo for the details sheet). Written against Immich 3.3; older servers use other entity types.
+- `ImmichHub` (singleton): opens every account's library, syncs them in the background (launch, pull to refresh, after uploads), publishes merged `albums` for the home list. `ImmichAccountViewModel` is only the per-account screen (Photos / Favorites).
+- Viewer/grid are source-agnostic via `AssetSource` (`AlbumDetailViewModel` for links, `AccountAssetSource` for accounts: bearer headers + per-account Kingfisher cache scope).
+- Home Albums merges share-link albums and `AccountAlbum`s (person badge); `AccountAlbumPage` opens one. Settings lists accounts (add another / swipe to sign out).
+
 ### Uploads
-`UploadQueueService` (singleton, persisted via `UploadQueuePersistenceService`) tracks tasks **by id, never by index**. Assets are exported to disk with `AssetFileExporter` (no whole-file `Data`); Immich builds its multipart body on disk. A `BGProcessingTask` resumes the queue and completes when it drains. Live Activity via `UploadActivityAttributes`.
+`UploadQueueService` (singleton, persisted via `UploadQueuePersistenceService`) tracks tasks **by id, never by index**. Assets are exported to disk with `AssetFileExporter` (no whole-file `Data`); Immich builds its multipart body on disk. Account uploads (`UploadDestination.immich`) authorise with the bearer token, send `x-immich-checksum` (SHA-1) so the server can skip duplicates, and can add the photo to an album. A `BGProcessingTask` resumes the queue and completes when it drains. Live Activity via `UploadActivityAttributes`.
 
 ### Shared helpers
 `AssetActions` (share / save to Photos), `ShareHelper`, `Formatters` (reuse date formatters), `AlbumCSV` (backup import/export), `Log` (os.Logger: `Log.app/sync/upload`; don't use `print`).

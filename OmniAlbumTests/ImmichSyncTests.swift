@@ -413,3 +413,116 @@ final class ImmichHubTests: XCTestCase {
         XCTAssertTrue(bobAssets.isEmpty)
     }
 }
+
+// MARK: - Account uploads (request shape; no photo library or server needed)
+
+final class ImmichAccountUploadTests: XCTestCase {
+    private let service = ImmichUploadService()
+
+    private func tempFile(_ bytes: [UInt8]) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("up-\(UUID().uuidString)")
+        try Data(bytes).write(to: url)
+        return url
+    }
+
+    func testUploadURLShareLinkUsesKeyAccountUsesNone() {
+        let link = service.buildUploadURL(baseURL: "https://h.test/immich", auth: .shareLink(key: "K", password: "pw"))
+        XCTAssertEqual(link.absoluteString, "https://h.test/immich/api/assets?key=K&password=pw")
+        let account = service.buildUploadURL(baseURL: "https://h.test/immich", auth: .bearer(token: "T"))
+        XCTAssertEqual(account.absoluteString, "https://h.test/immich/api/assets", "tokens go in a header, never the URL")
+    }
+
+    func testBearerHeaderOnlyForAccounts() {
+        var account = URLRequest(url: URL(string: "https://h.test/api/assets")!)
+        service.apply(.bearer(token: "T"), to: &account)
+        XCTAssertEqual(account.value(forHTTPHeaderField: "Authorization"), "Bearer T")
+        var link = URLRequest(url: URL(string: "https://h.test/api/assets")!)
+        service.apply(.shareLink(key: "K", password: nil), to: &link)
+        XCTAssertNil(link.value(forHTTPHeaderField: "Authorization"))
+    }
+
+    func testSHA1IsBase64OfTheFileBytes() throws {
+        let file = try tempFile(Array("abc".utf8))
+        XCTAssertEqual(try service.sha1Base64(of: file), "qZk+NkcGgWq6PiVxeFDCbJzQ2J0=") // SHA-1("abc"), as Immich stores it
+    }
+
+    func testMultipartBodyHasTheFieldsImmichNeedsAndTheExactBytes() throws {
+        let payload: [UInt8] = (0..<5000).map { UInt8($0 % 251) }
+        let file = try tempFile(payload)
+        let when = Date(timeIntervalSince1970: 1_700_000_000)
+        let body = try service.buildMultipartFile(
+            boundary: "BOUND", assetFile: file, fileName: "IMG_1.mov", mimeType: "video/quicktime",
+            metadata: UploadMetadata(createdAt: when, isFavorite: true, isVideo: true, durationSeconds: 12.5),
+            deviceAssetId: "local-id", durationInMilliseconds: true)
+        let data = try Data(contentsOf: body)
+        let text = String(decoding: data, as: UTF8.self)
+
+        for field in ["deviceAssetId", "deviceId", "fileCreatedAt", "fileModifiedAt", "isFavorite", "duration", "assetData"] {
+            XCTAssertTrue(text.contains("name=\"\(field)\""), "missing \(field)")
+        }
+        XCTAssertTrue(text.contains("filename=\"IMG_1.mov\""))
+        XCTAssertTrue(text.contains("Content-Type: video/quicktime"))
+        XCTAssertTrue(text.contains("\r\n12500\r\n"), "Immich 3 wants whole milliseconds")
+        XCTAssertTrue(text.contains("\r\ntrue\r\n"))
+        XCTAssertTrue(text.hasSuffix("--BOUND--\r\n"))
+        XCTAssertNotNil(data.range(of: Data(payload)), "the file must be copied through unchanged")
+    }
+
+    func testPhotosCarryNoDuration() throws {
+        let body = try service.buildMultipartFile(
+            boundary: "B", assetFile: try tempFile([1, 2, 3]), fileName: "a.jpg", mimeType: "image/jpeg",
+            metadata: UploadMetadata(createdAt: Date()), deviceAssetId: "x", durationInMilliseconds: true)
+        XCTAssertFalse(String(decoding: try Data(contentsOf: body), as: UTF8.self).contains("name=\"duration\""))
+    }
+
+    func testAddToAlbumSendsBearerAndIds() async throws {
+        StubServer.requests = []
+        nonisolated(unsafe) var seen: (method: String?, auth: String?, path: String?)?
+        StubServer.handler = { req in
+            seen = (req.httpMethod, req.value(forHTTPHeaderField: "Authorization"), req.url?.path)
+            return (200, "[]")
+        }
+        let uploader = ImmichUploadService(protocolClasses: [StubServer.self])
+        try await uploader.addAssetToAlbum(assetId: "asset-1", albumId: "al-9", baseURL: "https://h.test/immich", auth: .bearer(token: "T"))
+
+        XCTAssertEqual(seen?.method, "PUT")
+        XCTAssertEqual(seen?.auth, "Bearer T")
+        XCTAssertEqual(seen?.path, "/immich/api/albums/al-9/assets")
+        XCTAssertTrue(StubServer.requests.last?.body.contains("asset-1") == true)
+    }
+
+    // MARK: Destinations and persistence
+
+    func testImmichDestinationTargetsTheAccountAndAlbum() {
+        let account = ImmichAccountInfo(server: "https://h.test", email: "me@x", userId: "u1")
+        let picked = SelectedAsset(localIdentifier: "L1", fileName: "IMG.jpg", fileSize: 10, thumbnail: nil)
+
+        let toAlbum = UploadDestination.immich(account: account, albumId: "al1", albumName: "Trip").makeTask(picked)
+        XCTAssertEqual(toAlbum.accountID, account.id)
+        XCTAssertEqual(toAlbum.targetAlbumId, "al1")
+        XCTAssertEqual(toAlbum.albumId, "al1") // queue UI groups by album
+        XCTAssertEqual(toAlbum.baseURL, "https://h.test")
+        XCTAssertEqual(toAlbum.shareKey, "")
+
+        let toLibrary = UploadDestination.immich(account: account).makeTask(picked)
+        XCTAssertNil(toLibrary.targetAlbumId)
+        XCTAssertEqual(toLibrary.albumName, "Immich library")
+        XCTAssertEqual(toLibrary.albumId, "library|\(account.id)")
+    }
+
+    func testTaskRoundTripsAndOldQueueFilesStillLoad() throws {
+        let task = UploadTask(albumId: "a", albumName: "n", baseURL: "https://h", shareKey: "", localAssetIdentifier: "L", fileName: "f.jpg",
+                              accountID: "https://h|u1", targetAlbumId: "al1")
+        let back = try JSONDecoder().decode(UploadTask.self, from: try JSONEncoder().encode(task))
+        XCTAssertEqual(back.accountID, "https://h|u1")
+        XCTAssertEqual(back.targetAlbumId, "al1")
+
+        // A queue file written before accounts existed has neither field.
+        var legacy = try JSONSerialization.jsonObject(with: try JSONEncoder().encode(task)) as! [String: Any]
+        legacy["accountID"] = nil
+        legacy["targetAlbumId"] = nil
+        let old = try JSONDecoder().decode(UploadTask.self, from: try JSONSerialization.data(withJSONObject: legacy))
+        XCTAssertNil(old.accountID)
+        XCTAssertNil(old.targetAlbumId)
+    }
+}
