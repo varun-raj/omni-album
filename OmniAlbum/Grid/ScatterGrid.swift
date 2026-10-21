@@ -142,9 +142,24 @@ public struct ScatterGrid: UIViewControllerRepresentable {
 
     public final class Controller: UIViewController {
         let scrollView = UIScrollView(), grid = ScatterGridView(frame: .zero)
+        private var placedInitialOffset = false
         public override func loadView() { view = scrollView }
+
+        /// OmniAlbum: insets are set explicitly (automatic adjustment left a short album's first row under the bar
+        /// when its content didn't fill the screen). The grid starts below the bars and scrolls from there.
+        public override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            let safe = view.safeAreaInsets, inset = UIEdgeInsets(top: safe.top, left: 0, bottom: safe.bottom, right: 0)
+            guard scrollView.contentInset != inset else { return }
+            let atTop = !placedInitialOffset || scrollView.contentOffset.y <= -scrollView.contentInset.top + 1
+            scrollView.contentInset = inset
+            scrollView.verticalScrollIndicatorInsets = inset
+            if atTop { scrollView.contentOffset.y = -inset.top }
+            placedInitialOffset = true
+        }
         public override func viewDidLoad() {
             super.viewDidLoad()
+            scrollView.contentInsetAdjustmentBehavior = .never
             grid.autoresizingMask = [.flexibleWidth]
             scrollView.addSubview(grid)
             #if compiler(>=6.2) // iOS 26 SDK (Xcode 26+)
