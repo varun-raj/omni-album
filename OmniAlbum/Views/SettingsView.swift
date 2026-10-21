@@ -203,9 +203,7 @@ struct SettingsView: View {
     }
 
     private func formatDateForFilename() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
+        Formatters.fileDate.string(from: Date())
     }
 
     private func handleImportResult(_ result: Result<[URL], Error>) {

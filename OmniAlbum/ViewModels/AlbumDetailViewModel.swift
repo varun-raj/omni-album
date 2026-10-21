@@ -34,16 +34,7 @@ final class AlbumDetailViewModel: ObservableObject {
     nonisolated private func computeDateRangeText(from assets: [Asset]) -> String? {
         guard !assets.isEmpty else { return nil }
 
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let fallbackFormatter = ISO8601DateFormatter()
-
-        let dates = assets.compactMap { asset -> Date? in
-            let dateString = asset.createdAt ?? ""
-            guard !dateString.isEmpty else { return nil }
-            return isoFormatter.date(from: dateString)
-                ?? fallbackFormatter.date(from: dateString)
-        }
+        let dates = assets.compactMap { asset in asset.createdAt.flatMap(Formatters.parseISO) }
 
         guard let minDate = dates.min(), let maxDate = dates.max() else { return nil }
 
@@ -51,16 +42,10 @@ final class AlbumDetailViewModel: ObservableObject {
         let minComponents = calendar.dateComponents([.month, .year], from: minDate)
         let maxComponents = calendar.dateComponents([.month, .year], from: maxDate)
 
-        let monthFormatter = DateFormatter()
-        monthFormatter.dateFormat = "MMM"
-
-        let yearFormatter = DateFormatter()
-        yearFormatter.dateFormat = "yyyy"
-
-        let minMonth = monthFormatter.string(from: minDate)
-        let minYear = yearFormatter.string(from: minDate)
-        let maxMonth = monthFormatter.string(from: maxDate)
-        let maxYear = yearFormatter.string(from: maxDate)
+        let minMonth = Formatters.shortMonth.string(from: minDate)
+        let minYear = Formatters.year.string(from: minDate)
+        let maxMonth = Formatters.shortMonth.string(from: maxDate)
+        let maxYear = Formatters.year.string(from: maxDate)
 
         if minComponents.year == maxComponents.year {
             if minComponents.month == maxComponents.month {

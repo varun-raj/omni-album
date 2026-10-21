@@ -7,7 +7,6 @@
 //
 
 import SwiftUI
-import Photos
 
 private struct LightboxSelection: Identifiable {
     let id: Int
@@ -179,26 +178,9 @@ struct AlbumDetailView: View {
 
     // MARK: - Tile menu actions
 
-    /// Original bytes (decrypted for Ente), falling back to preview/thumbnail URLs.
-    private func originalFile(for asset: Asset) async throws -> URL {
-        let data: Data
-        if let decrypted = try await viewModel.loadImageData(for: asset, variant: .original) {
-            data = decrypted
-        } else {
-            guard let url = viewModel.originalURL(for: asset) ?? viewModel.previewURL(for: asset) ?? viewModel.thumbnailURL(for: asset) else {
-                throw URLError(.badURL)
-            }
-            data = try await URLSession.shared.data(from: url).0
-        }
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent(asset.originalFileName)
-        try? FileManager.default.removeItem(at: file)
-        try data.write(to: file)
-        return file
-    }
-
     private func share(_ asset: Asset) async {
         do {
-            ShareHelper.share(items: [try await originalFile(for: asset)])
+            try await AssetActions.share(asset, viewModel: viewModel)
         } catch {
             actionError = "Failed to load image: \(error.localizedDescription)"
         }
@@ -206,11 +188,7 @@ struct AlbumDetailView: View {
 
     private func save(_ asset: Asset) async {
         do {
-            let file = try await originalFile(for: asset)
-            defer { try? FileManager.default.removeItem(at: file) }
-            try await PHPhotoLibrary.shared().performChanges {
-                PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: file)
-            }
+            try await AssetActions.saveToPhotos(asset, viewModel: viewModel)
         } catch {
             actionError = "Failed to save: \(error.localizedDescription)"
         }
