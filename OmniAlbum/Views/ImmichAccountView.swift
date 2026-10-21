@@ -222,6 +222,7 @@ private struct AccountTimeline: View {
                 Image(systemName: "chevron.up.chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
             }
         }
+        .tint(.primary) // menu labels would otherwise take the accent colour
         .accessibilityLabel("Account: \(viewModel.activeAccount?.email ?? ""). Switch account")
     }
 
