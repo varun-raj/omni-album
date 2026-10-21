@@ -136,7 +136,9 @@ struct AlbumDetailView: View {
             SkeletonPhotoGrid()
         } else {
             AlbumPhotoGrid(
-                viewModel: viewModel,
+                assets: viewModel.assets,
+                source: viewModel,
+                onRefresh: { await viewModel.refresh() },
                 namespace: zoomNamespace,
                 onSelect: openInLightbox,
                 onShare: { asset in Task { await share(asset) } },

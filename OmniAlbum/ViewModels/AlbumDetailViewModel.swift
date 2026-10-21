@@ -10,7 +10,7 @@ import Combine
 import WidgetKit
 
 @MainActor
-final class AlbumDetailViewModel: ObservableObject {
+final class AlbumDetailViewModel: ObservableObject, AssetSource {
     @Published private(set) var assets: [Asset] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isRefreshing = false

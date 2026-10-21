@@ -8,10 +8,23 @@
 import SwiftUI
 import MapKit
 
+/// Loads EXIF the source keeps outside the asset (account libraries) before showing the panel.
+struct AssetDetailsContainer: View {
+    let asset: Asset
+    let source: any AssetSource
+    @State private var resolved: Asset?
+
+    var body: some View {
+        AssetDetailsSheet(asset: resolved ?? asset)
+            .task {
+                if asset.exif == nil, let exif = await source.exif(for: asset) { resolved = asset.withExif(exif) }
+            }
+    }
+}
+
 // MARK: - Asset Details Sheet (clean info panel)
 struct AssetDetailsSheet: View {
     let asset: Asset
-    let viewModel: AlbumDetailViewModel
 
     @Environment(\.dismiss) private var dismiss
 

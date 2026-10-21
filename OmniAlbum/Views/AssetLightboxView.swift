@@ -16,7 +16,7 @@ import Kingfisher
 struct AssetLightboxView: View {
     let assets: [Asset]
     let selectedIndex: Int
-    let viewModel: AlbumDetailViewModel
+    let viewModel: any AssetSource
     let zoomNamespace: Namespace.ID
     let onDismiss: () -> Void
 
@@ -32,7 +32,7 @@ struct AssetLightboxView: View {
     @State private var showSaveSuccess = false
     @State private var showChrome = true
 
-    init(assets: [Asset], selectedIndex: Int, viewModel: AlbumDetailViewModel, zoomNamespace: Namespace.ID, startSlideshow: Bool = false, onDismiss: @escaping () -> Void) {
+    init(assets: [Asset], selectedIndex: Int, viewModel: any AssetSource, zoomNamespace: Namespace.ID, startSlideshow: Bool = false, onDismiss: @escaping () -> Void) {
         self.startsSlideshow = startSlideshow
         self.assets = assets
         self.selectedIndex = selectedIndex
@@ -72,7 +72,8 @@ struct AssetLightboxView: View {
                 // TabView stutters when its pages change under it, and this one only builds pages as they scroll in.
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: 0) {
-                        ForEach(Array(assets.enumerated()), id: \.element.id) { index, asset in
+                        ForEach(assets.indices, id: \.self) { index in
+                            let asset = assets[index]
                             // Far-away pages are released; they are always off screen, so swapping them is invisible.
                             Group {
                                 if abs(index - currentIndex) <= 3 {
@@ -147,7 +148,7 @@ struct AssetLightboxView: View {
         }
         .sheet(isPresented: $showDetailsSheet) {
             if let asset = currentAsset {
-                AssetDetailsSheet(asset: asset, viewModel: viewModel)
+                AssetDetailsContainer(asset: asset, source: viewModel)
                     .presentationDetents([.medium, .large])
             }
         }
@@ -292,9 +293,12 @@ struct AssetLightboxView: View {
             GeometryReader { geo in
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 3) {
-                    ForEach(Array(assets.enumerated()), id: \.element.id) { index, asset in
+                    ForEach(assets.indices, id: \.self) { index in
+                        let asset = assets[index]
                         ThumbnailCell(
                             url: viewModel.thumbnailURL(for: asset),
+                            headers: viewModel.imageHeaders,
+                            cacheScope: viewModel.imageCacheScope,
                             isSelected: currentIndex == index,
                             isVideo: viewModel.isVideo(asset)
                         )
@@ -441,7 +445,7 @@ struct AssetLightboxView: View {
 
 private struct PhotoPageView: View {
     let asset: Asset
-    let viewModel: AlbumDetailViewModel
+    let viewModel: any AssetSource
     @Binding var isZoomed: Bool
     let onTap: () -> Void
 
@@ -450,6 +454,8 @@ private struct PhotoPageView: View {
             VideoPlayerView(
                 videoURL: viewModel.videoPlaybackURL(for: asset),
                 thumbnailURL: viewModel.thumbnailURL(for: asset),
+                headers: viewModel.imageHeaders,
+                cacheScope: viewModel.imageCacheScope,
                 onTap: onTap
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -459,6 +465,8 @@ private struct PhotoPageView: View {
             ZoomablePhotoView(
                 url: url,
                 viewModel: viewModel.requiresDecryption ? viewModel : nil,
+                headers: viewModel.imageHeaders,
+                cacheScope: viewModel.imageCacheScope,
                 asset: viewModel.requiresDecryption ? asset : nil,
                 isZoomed: $isZoomed,
                 onTap: onTap
@@ -473,6 +481,8 @@ private struct PhotoPageView: View {
 
 private struct ThumbnailCell: View {
     let url: URL?
+    var headers: [String: String]? = nil
+    var cacheScope: String? = nil
     let isSelected: Bool
     var isVideo: Bool = false
 
@@ -480,7 +490,8 @@ private struct ThumbnailCell: View {
         ZStack(alignment: .bottomTrailing) {
             Group {
                 if let url = url {
-                    KFImage(url)
+                    KFImage(source: .network(ImageLoading.resource(for: url, scope: cacheScope)))
+                        .requestModifier(ImageLoading.modifier(headers: headers))
                         .setProcessor(DownsamplingImageProcessor(size: CGSize(width: 160, height: 160)))
                         .scaleFactor(1)
                         .cacheOriginalImage()

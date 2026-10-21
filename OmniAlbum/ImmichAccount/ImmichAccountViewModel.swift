@@ -16,6 +16,7 @@ final class ImmichAccountViewModel: ObservableObject {
     @Published private(set) var activeID: String?
     @Published private(set) var months: [LibraryStore.MonthBucket] = []
     @Published private(set) var counts: LibraryStore.Counts?
+    @Published private(set) var albums: [LibraryAlbum] = []
     @Published private(set) var lastSyncText: String?
     @Published private(set) var isSyncing = false
     @Published private(set) var progress = SyncProgress()
@@ -28,6 +29,8 @@ final class ImmichAccountViewModel: ObservableObject {
     private let session: ImmichAccountSession
     private var store: LibraryStore?
     private(set) var client: ImmichAccountClient?
+    /// Feeds the shared grid and viewer for the active account.
+    private(set) var assetSource: AccountAssetSource?
     private var syncTask: Task<Void, Never>?
 
     init(session: ImmichAccountSession = .shared) {
@@ -87,6 +90,7 @@ final class ImmichAccountViewModel: ObservableObject {
         guard wasActive else { return }
         resetDisplay()
         client = nil
+        assetSource = nil
         store = nil
         activeID = nil
         if let next = session.activeCredentials {
@@ -99,7 +103,9 @@ final class ImmichAccountViewModel: ObservableObject {
     private func open(_ creds: ImmichCredentials) {
         do {
             store = try LibraryStore(path: try LibraryStore.defaultPath(for: creds.id))
-            client = ImmichAccountClient(credentials: creds)
+            let newClient = ImmichAccountClient(credentials: creds)
+            client = newClient
+            assetSource = AccountAssetSource(client: newClient, store: store!)
             activeID = creds.id
             errorMessage = nil
         } catch {
@@ -109,6 +115,7 @@ final class ImmichAccountViewModel: ObservableObject {
 
     private func resetDisplay() {
         months = []
+        albums = []
         counts = nil
         lastSummary = nil
         lastSyncText = nil
@@ -167,6 +174,7 @@ final class ImmichAccountViewModel: ObservableObject {
         guard let store else { return }
         months = (try? await store.monthBuckets()) ?? []
         counts = try? await store.counts()
+        albums = (try? await store.albums()) ?? []
         if let iso = try? await store.meta("lastSync"), let date = ISO8601DateFormatter().date(from: iso) {
             lastSyncText = date.formatted(.relative(presentation: .named))
         }
@@ -175,6 +183,15 @@ final class ImmichAccountViewModel: ObservableObject {
 
     func assets(inMonth month: String) async -> [LibraryAsset] {
         (try? await store?.assets(inMonth: month)) ?? []
+    }
+
+    /// Everything the viewer pages through, newest first.
+    func timelineAssets(favoritesOnly: Bool = false) async -> [Asset] {
+        ((try? await store?.timelineAssets(favoritesOnly: favoritesOnly)) ?? []).map(\.asAsset)
+    }
+
+    func albumAssets(_ albumId: String) async -> [Asset] {
+        ((try? await store?.assets(inAlbum: albumId)) ?? []).map(\.asAsset)
     }
 
     func thumbnailURL(_ id: String) -> URL? { client?.thumbnailURL(assetId: id) }

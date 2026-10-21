@@ -14,6 +14,8 @@ import Kingfisher
 struct VideoPlayerView: View {
     let videoURL: URL?
     let thumbnailURL: URL?
+    var headers: [String: String]? = nil
+    var cacheScope: String? = nil
     let onTap: () -> Void
 
     @State private var player: AVPlayer?
@@ -36,7 +38,8 @@ struct VideoPlayerView: View {
                 } else {
                     // Thumbnail while loading
                     if let thumbnailURL = thumbnailURL {
-                        KFImage(thumbnailURL)
+                        KFImage(source: .network(ImageLoading.resource(for: thumbnailURL, scope: cacheScope)))
+                            .requestModifier(ImageLoading.modifier(headers: headers))
                             .placeholder {
                                 placeholderView
                             }
@@ -128,7 +131,9 @@ struct VideoPlayerView: View {
             // .playback so sound isn't muted by the silent switch and AirPlay / external playback can take over
             try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
             try? AVAudioSession.sharedInstance().setActive(true)
-            let newPlayer = AVPlayer(url: videoURL)
+            // The header key is what AVFoundation reads for authenticated streams (the constant isn't public API)
+            let asset = AVURLAsset(url: videoURL, options: headers.map { ["AVURLAssetHTTPHeaderFieldsKey": $0] })
+            let newPlayer = AVPlayer(playerItem: AVPlayerItem(asset: asset))
             newPlayer.allowsExternalPlayback = true
             player = newPlayer
         }

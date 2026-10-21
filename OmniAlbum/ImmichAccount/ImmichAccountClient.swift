@@ -99,6 +99,14 @@ struct ImmichAccountClient: Sendable {
         URL(string: "\(credentials.server)/api/assets/\(assetId)/thumbnail?size=thumbnail")
     }
 
+    func originalURL(assetId: String) -> URL? {
+        URL(string: "\(credentials.server)/api/assets/\(assetId)/original")
+    }
+
+    func videoPlaybackURL(assetId: String) -> URL? {
+        URL(string: "\(credentials.server)/api/assets/\(assetId)/video/playback")
+    }
+
     func previewURL(assetId: String) -> URL? {
         URL(string: "\(credentials.server)/api/assets/\(assetId)/thumbnail?size=preview")
     }

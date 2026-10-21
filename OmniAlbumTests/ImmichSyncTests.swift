@@ -3,8 +3,8 @@ import XCTest
 
 // MARK: - Helpers
 
-private func assetLine(_ id: String, date: String = "2024-05-10T10:00:00.000Z", visibility: String = "timeline", type: String = "AssetV2", ack: String? = nil) -> String {
-    let data = #"{"id":"\#(id)","ownerId":"u1","type":"IMAGE","originalFileName":"\#(id).jpg","checksum":"c","fileCreatedAt":"\#(date)","localDateTime":"\#(date)","width":4000,"height":3000,"duration":null,"isFavorite":false,"visibility":"\#(visibility)","thumbhash":null,"livePhotoVideoId":null,"stackId":null,"deletedAt":null,"isEdited":false,"libraryId":null,"createdAt":null}"#
+private func assetLine(_ id: String, date: String = "2024-05-10T10:00:00.000Z", visibility: String = "timeline", type: String = "AssetV2", ack: String? = nil, favorite: Bool = false) -> String {
+    let data = #"{"id":"\#(id)","ownerId":"u1","type":"IMAGE","originalFileName":"\#(id).jpg","checksum":"c","fileCreatedAt":"\#(date)","localDateTime":"\#(date)","width":4000,"height":3000,"duration":null,"isFavorite":\#(favorite),"visibility":"\#(visibility)","thumbhash":null,"livePhotoVideoId":null,"stackId":null,"deletedAt":null,"isEdited":false,"libraryId":null,"createdAt":null}"#
     return #"{"type":"\#(type)","data":\#(data),"ack":"\#(ack ?? "\(type)|\(id)")"}"#
 }
 
@@ -304,5 +304,53 @@ final class ImmichAccountSessionTests: XCTestCase {
         session.add(creds("u1"))
         let relaunched = ImmichAccountSession(defaults: defaults)
         XCTAssertEqual(relaunched.activeCredentials?.userId, "u1")
+    }
+}
+
+
+// MARK: - Viewer feed
+
+final class AccountViewerFeedTests: XCTestCase {
+    private func change(_ json: String) throws -> LibraryChange {
+        let data = Data(json.utf8), d = JSONDecoder()
+        guard case .change(let c) = try SyncLine.decode(data, header: try d.decode(SyncLineHeader.self, from: data), decoder: d) else { throw XCTSkip() }
+        return c
+    }
+
+    func testTimelineIsNewestFirstAndFavouritesFilter() async throws {
+        let (store, _) = try tempStore()
+        try await store.apply([
+            try change(assetLine("old", date: "2020-01-01T00:00:00.000Z")),
+            try change(assetLine("fav", date: "2023-01-01T00:00:00.000Z", favorite: true)),
+            try change(assetLine("new", date: "2024-01-01T00:00:00.000Z")),
+            try change(assetLine("hidden", date: "2025-01-01T00:00:00.000Z", visibility: "archive")),
+        ])
+        let all = try await store.timelineAssets()
+        XCTAssertEqual(all.map(\.id), ["new", "fav", "old"])
+        let favourites = try await store.timelineAssets(favoritesOnly: true)
+        XCTAssertEqual(favourites.map(\.id), ["fav"])
+    }
+
+    func testExifRoundTrip() async throws {
+        let (store, _) = try tempStore()
+        let exif = try change(line("AssetExifV1", #"{"assetId":"a","city":"Paris","state":null,"country":"France","make":"Apple","model":"iPhone","lensModel":null,"latitude":48.85,"longitude":2.35,"description":null,"fileSizeInByte":123456,"iso":100,"fNumber":1.8,"focalLength":26.0,"exposureTime":"1/120","rating":null,"orientation":"1","dateTimeOriginal":null,"exifImageWidth":4000,"exifImageHeight":3000}"#, ack: "AssetExifV1|a"))
+        try await store.apply([exif])
+        let loaded = try await store.exif(assetId: "a")
+        XCTAssertEqual(loaded?.city, "Paris")
+        XCTAssertEqual(loaded?.iso, 100)
+        XCTAssertEqual(loaded?.latitude ?? 0, 48.85, accuracy: 0.001)
+        let missing = try await store.exif(assetId: "nope")
+        XCTAssertNil(missing)
+    }
+
+    func testDurationIsConvertedFromMilliseconds() {
+        let video = LibraryAsset(id: "v", type: "VIDEO", fileName: "v.mov", localDateTime: "2024-01-01T00:00:00.000Z",
+                                 width: 1920, height: 1080, duration: 3_725_000, isFavorite: false, thumbhash: nil)
+        XCTAssertEqual(video.asAsset.duration, "1:02:05")
+        XCTAssertEqual(video.asAsset.type, .video)
+        let photo = LibraryAsset(id: "p", type: "IMAGE", fileName: "p.jpg", localDateTime: "2024-01-01T00:00:00.000Z",
+                                 width: 10, height: 10, duration: nil, isFavorite: false, thumbhash: nil)
+        XCTAssertNil(photo.asAsset.duration)
+        XCTAssertEqual(photo.asAsset.type, .image)
     }
 }

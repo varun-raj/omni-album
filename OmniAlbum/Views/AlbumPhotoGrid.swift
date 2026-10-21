@@ -9,7 +9,9 @@
 import SwiftUI
 
 struct AlbumPhotoGrid: View {
-    @ObservedObject var viewModel: AlbumDetailViewModel
+    let assets: [Asset]
+    let source: any AssetSource
+    var onRefresh: () async -> Void = {}
     let namespace: Namespace.ID
     let onSelect: (Asset) -> Void
     let onShare: (Asset) -> Void
@@ -26,7 +28,7 @@ struct AlbumPhotoGrid: View {
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: Self.gap) {
-                ForEach(viewModel.assets) { asset in
+                ForEach(assets) { asset in
                     Button {
                         onSelect(asset)
                     } label: {
@@ -35,7 +37,7 @@ struct AlbumPhotoGrid: View {
                     .buttonStyle(.plain)
                     .matchedTransitionSource(id: asset.id, in: namespace)
                     .contextMenu {
-                        if viewModel.allowDownload, asset.type == .image {
+                        if source.allowDownload, asset.type == .image {
                             Button("Share", systemImage: "square.and.arrow.up") { onShare(asset) }
                             Button("Save to Photos", systemImage: "square.and.arrow.down") { onSave(asset) }
                         }
@@ -44,13 +46,15 @@ struct AlbumPhotoGrid: View {
                 }
             }
         }
-        .refreshable { await viewModel.refresh() }
+        .refreshable { await onRefresh() }
     }
 
     private func tile(_ asset: Asset) -> some View {
         Color.clear
             .aspectRatio(1, contentMode: .fit)
-            .overlay { CachedAsyncImage(url: viewModel.thumbnailURL(for: asset)) }
+            .overlay {
+                CachedAsyncImage(url: source.thumbnailURL(for: asset), headers: source.imageHeaders, cacheScope: source.imageCacheScope)
+            }
             .clipped()
             .contentShape(Rectangle())
             .overlay(alignment: .bottomTrailing) {

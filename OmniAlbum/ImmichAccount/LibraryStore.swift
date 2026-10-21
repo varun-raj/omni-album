@@ -176,6 +176,32 @@ actor LibraryStore {
         return Self.rows(stmt)
     }
 
+    /// The whole timeline, newest first: what the viewer pages through.
+    func timelineAssets(favoritesOnly: Bool = false) throws -> [LibraryAsset] {
+        let stmt = try db.prepare(Self.assetSelect + """
+            WHERE visibility = 'timeline' AND deletedAt IS NULL AND localDateTime IS NOT NULL
+            """ + (favoritesOnly ? " AND isFavorite = 1 " : " ") + """
+            ORDER BY localDateTime DESC
+            """)
+        stmt.bind([])
+        return Self.rows(stmt)
+    }
+
+    func exif(assetId: String) throws -> SyncExif? {
+        let stmt = try db.prepare("""
+            SELECT assetId, city, state, country, make, model, lensModel, latitude, longitude, description, fileSizeInByte, iso,
+                   fNumber, focalLength, exposureTime, rating, orientation, dateTimeOriginal, exifImageWidth, exifImageHeight
+            FROM exifs WHERE assetId = ?
+            """)
+        stmt.bind([assetId])
+        guard stmt.step() else { return nil }
+        return SyncExif(assetId: assetId, city: stmt.text(1), state: stmt.text(2), country: stmt.text(3), make: stmt.text(4),
+                        model: stmt.text(5), lensModel: stmt.text(6), latitude: stmt.double(7), longitude: stmt.double(8),
+                        description: stmt.text(9), fileSizeInByte: stmt.int(10), iso: stmt.int(11), fNumber: stmt.double(12),
+                        focalLength: stmt.double(13), exposureTime: stmt.text(14), rating: stmt.int(15), orientation: stmt.text(16),
+                        dateTimeOriginal: stmt.text(17), exifImageWidth: stmt.int(18), exifImageHeight: stmt.int(19))
+    }
+
     func albums() throws -> [LibraryAlbum] {
         let stmt = try db.prepare("""
             SELECT a.id, a.name, a.description, a.thumbnailAssetId, a.updatedAt,

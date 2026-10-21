@@ -13,7 +13,7 @@ enum AssetActions {
     /// The asset's original bytes (decrypted for Ente) in a temp file named like the asset.
     /// Downloads straight to disk, so large videos don't sit in memory. Falls back from the original
     /// to smaller renditions if the server refuses it.
-    static func originalFile(for asset: Asset, viewModel: AlbumDetailViewModel) async throws -> URL {
+    static func originalFile(for asset: Asset, viewModel: any AssetSource) async throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let file = dir.appendingPathComponent(asset.originalFileName)
@@ -30,7 +30,9 @@ enum AssetActions {
         var lastError: Error = URLError(.badURL)
         for url in candidates.compactMap({ $0 }) {
             do {
-                let (downloaded, response) = try await URLSession.shared.download(from: url)
+                var request = URLRequest(url: url)
+                viewModel.imageHeaders?.forEach { request.setValue($1, forHTTPHeaderField: $0) }
+                let (downloaded, response) = try await URLSession.shared.download(for: request)
                 if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                     throw URLError(.badServerResponse)
                 }
@@ -43,12 +45,12 @@ enum AssetActions {
         throw lastError
     }
 
-    static func share(_ asset: Asset, viewModel: AlbumDetailViewModel) async throws {
+    static func share(_ asset: Asset, viewModel: any AssetSource) async throws {
         let file = try await originalFile(for: asset, viewModel: viewModel)
         ShareHelper.share(items: [file])
     }
 
-    static func saveToPhotos(_ asset: Asset, viewModel: AlbumDetailViewModel) async throws {
+    static func saveToPhotos(_ asset: Asset, viewModel: any AssetSource) async throws {
         let file = try await originalFile(for: asset, viewModel: viewModel)
         defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
         let isVideo = viewModel.isVideo(asset)

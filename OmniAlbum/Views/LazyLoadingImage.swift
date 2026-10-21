@@ -26,13 +26,8 @@ struct CachedAsyncImage: View {
             Color(.systemGray5)
 
             if let url = url {
-                KFImage(source: .network(Self.resource(for: url, scope: cacheScope)))
-                    .requestModifier(AnyModifier { [headers] request in
-                        guard let headers else { return request }
-                        var r = request
-                        headers.forEach { r.setValue($1, forHTTPHeaderField: $0) }
-                        return r
-                    })
+                KFImage(source: .network(ImageLoading.resource(for: url, scope: cacheScope)))
+                    .requestModifier(ImageLoading.modifier(headers: headers))
                     .setProcessor(DownsamplingImageProcessor(size: CGSize(width: maxPixel, height: maxPixel)))
                     .scaleFactor(1) // size above is already pixels
                     .cacheOriginalImage()
@@ -52,10 +47,20 @@ struct CachedAsyncImage: View {
     }
 }
 
-extension CachedAsyncImage {
-    fileprivate static func resource(for url: URL, scope: String?) -> Kingfisher.Resource {
+/// Kingfisher resource and options for loads that may need a bearer token and a per-account cache scope.
+enum ImageLoading {
+    static func resource(for url: URL, scope: String?) -> Kingfisher.Resource {
         guard let scope else { return KF.ImageResource(downloadURL: url) }
         return KF.ImageResource(downloadURL: url, cacheKey: "\(scope)|\(url.absoluteString)")
+    }
+
+    static func modifier(headers: [String: String]?) -> AnyModifier {
+        AnyModifier { request in
+            guard let headers else { return request }
+            var r = request
+            headers.forEach { r.setValue($1, forHTTPHeaderField: $0) }
+            return r
+        }
     }
 }
 

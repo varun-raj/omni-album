@@ -11,7 +11,9 @@ import Kingfisher
 // MARK: - Zoomable photo (pinch to zoom, pan when zoomed, double-tap to zoom)
 struct ZoomablePhotoView: View {
     let url: URL?
-    var viewModel: AlbumDetailViewModel? = nil
+    var viewModel: (any AssetSource)? = nil
+    var headers: [String: String]? = nil
+    var cacheScope: String? = nil
     var asset: Asset? = nil
     var isZoomed: Binding<Bool>? = nil
     var onTap: (() -> Void)? = nil
@@ -91,7 +93,10 @@ struct ZoomablePhotoView: View {
 
         // Use Kingfisher for caching
         let result = await withCheckedContinuation { continuation in
-            KingfisherManager.shared.retrieveImage(with: url) { result in
+            KingfisherManager.shared.retrieveImage(
+                with: ImageLoading.resource(for: url, scope: cacheScope),
+                options: [.requestModifier(ImageLoading.modifier(headers: headers))]
+            ) { result in
                 continuation.resume(returning: result)
             }
         }
