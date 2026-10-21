@@ -61,8 +61,9 @@ struct AssetLightboxView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Dark stage; dismissal (drag down / zoom back to the tile) is the system zoom transition's.
-                Color.black.ignoresSafeArea()
+                // Tap cycles: light stage with all the chrome <-> black stage with nothing.
+                // Dismissal (drag down / zoom back to the tile) is the system zoom transition's.
+                (showChrome ? Color(.systemBackground) : Color.black).ignoresSafeArea()
 
                 // Photo pager, edge to edge
                 TabView(selection: $currentIndex) {
@@ -84,11 +85,13 @@ struct AssetLightboxView: View {
                         topBar
                             .transition(.opacity)
                         Spacer()
+                        thumbnailStrip
+                            .transition(.opacity)
                         bottomBar
                             .transition(.opacity)
                     }
                 }
-                .tint(.white)
+                .tint(.primary)
                 .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 0 : 8)
 
                 // Toast overlay for sharing/saving
@@ -132,6 +135,7 @@ struct AssetLightboxView: View {
             Text(saveError ?? "")
         }
         .animation(.easeInOut(duration: 0.25), value: showChrome)
+        .statusBarHidden(!showChrome) // dark status text would vanish on the black stage
         .navigationTransition(.zoom(sourceID: currentAsset?.id ?? "", in: zoomNamespace))
     }
 
@@ -244,8 +248,39 @@ struct AssetLightboxView: View {
         .padding(.vertical, 12)
     }
 
+    // MARK: - Film strip
+
+    private var thumbnailStrip: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 3) {
+                    ForEach(Array(assets.enumerated()), id: \.element.id) { index, asset in
+                        ThumbnailCell(
+                            url: viewModel.thumbnailURL(for: asset),
+                            isSelected: currentIndex == index,
+                            isVideo: viewModel.isVideo(asset)
+                        )
+                        .padding(.horizontal, currentIndex == index ? 5 : 0) // the current one opens a gap, like Photos
+                        .onTapGesture { currentIndex = index }
+                        .accessibilityElement()
+                        .accessibilityLabel(asset.originalFileName)
+                        .accessibilityAddTraits(currentIndex == index ? [.isButton, .isSelected] : .isButton)
+                        .id(index)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .frame(height: 52)
+            .animation(.easeInOut(duration: 0.2), value: currentIndex)
+            .onChange(of: currentIndex) { _, newIndex in
+                withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(newIndex, anchor: .center) }
+            }
+            .onAppear { proxy.scrollTo(currentIndex, anchor: .center) }
+        }
+    }
+
     private func toggleChrome() {
-        withAnimation(.easeInOut(duration: 0.25)) {
+        withAnimation(.easeInOut(duration: 0.3)) {
             showChrome.toggle()
         }
     }

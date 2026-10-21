@@ -87,7 +87,6 @@ struct AlbumDetailView: View {
                     zoomNamespace: zoomNamespace,
                     onDismiss: { lightboxSelection = nil }
                 )
-                .preferredColorScheme(.dark) // photo/video viewing: black stage, like Photos
             }
             .alert("Error", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
                 Button("OK") { actionError = nil }
