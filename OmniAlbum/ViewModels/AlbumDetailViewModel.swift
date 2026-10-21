@@ -14,6 +14,8 @@ final class AlbumDetailViewModel: ObservableObject {
     @Published private(set) var assets: [Asset] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isRefreshing = false
+    /// True once the first fetch has finished (success or failure), so "No Photos" never flashes before it.
+    @Published private(set) var hasLoaded = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var albumDetails: AlbumDetail?
     @Published private(set) var dateRangeText: String?
@@ -138,6 +140,7 @@ final class AlbumDetailViewModel: ObservableObject {
             errorMessage = nil
             await fetchAlbumData()
             isLoading = false
+            hasLoaded = true
         } else if !assets.isEmpty && !isRefreshing {
             // Background refresh for fresh data
             isRefreshing = true

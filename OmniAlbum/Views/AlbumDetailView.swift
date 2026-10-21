@@ -121,8 +121,10 @@ struct AlbumDetailView: View {
     private var mainContent: some View {
         if let error = viewModel.errorMessage {
             errorView(error: error)
-        } else if viewModel.assets.isEmpty && !viewModel.isLoading {
+        } else if viewModel.assets.isEmpty && viewModel.hasLoaded {
             emptyView
+        } else if viewModel.assets.isEmpty {
+            SkeletonPhotoGrid()
         } else {
             AlbumPhotoGrid(
                 viewModel: viewModel,
@@ -131,12 +133,6 @@ struct AlbumDetailView: View {
                 onShare: { asset in Task { await share(asset) } },
                 onSave: { asset in Task { await save(asset) } }
             )
-            .overlay {
-                if viewModel.isLoading && viewModel.assets.isEmpty {
-                    loadingOverlay
-                }
-            }
-            .animation(.easeOut(duration: 0.3), value: viewModel.isLoading)
         }
     }
 
@@ -167,21 +163,6 @@ struct AlbumDetailView: View {
         } description: {
             Text("This album has no photos yet.")
         }
-    }
-
-    private var loadingOverlay: some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-                .tint(.secondary)
-
-            Text("Loading photos…")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.ultraThinMaterial)
-        .transition(.opacity.animation(.easeOut(duration: 0.3)))
     }
 
     // MARK: - Opening
