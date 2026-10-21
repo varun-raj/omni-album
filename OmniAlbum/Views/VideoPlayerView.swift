@@ -125,7 +125,12 @@ struct VideoPlayerView: View {
         guard let videoURL = videoURL else { return }
 
         if player == nil {
-            player = AVPlayer(url: videoURL)
+            // .playback so sound isn't muted by the silent switch and AirPlay / external playback can take over
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            try? AVAudioSession.sharedInstance().setActive(true)
+            let newPlayer = AVPlayer(url: videoURL)
+            newPlayer.allowsExternalPlayback = true
+            player = newPlayer
         }
         player?.play()
         isPlaying = true

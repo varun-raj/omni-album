@@ -23,13 +23,17 @@ struct AssetLightboxView: View {
     @State private var currentIndex: Int
     @State private var showDetailsSheet = false
     @State private var isZoomed = false
+    @State private var isSlideshow = false
+    @AppStorage("slideshowSeconds") private var slideshowSeconds = 3.0
+    private let startsSlideshow: Bool
     @State private var isSaving = false
     @State private var isSharing = false
     @State private var saveError: String?
     @State private var showSaveSuccess = false
     @State private var showChrome = true
 
-    init(assets: [Asset], selectedIndex: Int, viewModel: AlbumDetailViewModel, zoomNamespace: Namespace.ID, onDismiss: @escaping () -> Void) {
+    init(assets: [Asset], selectedIndex: Int, viewModel: AlbumDetailViewModel, zoomNamespace: Namespace.ID, startSlideshow: Bool = false, onDismiss: @escaping () -> Void) {
+        self.startsSlideshow = startSlideshow
         self.assets = assets
         self.selectedIndex = selectedIndex
         self.viewModel = viewModel
@@ -64,27 +68,34 @@ struct AssetLightboxView: View {
                 // Dismissal (drag down / zoom back to the tile) is the system zoom transition's.
                 (showChrome ? Color(.systemBackground) : Color.black).ignoresSafeArea()
 
-                // Photo pager, edge to edge
-                TabView(selection: $currentIndex) {
-                    ForEach(Array(assets.enumerated()), id: \.element.id) { index, asset in
-                        // Pages far from the current one stay empty: a TabView otherwise builds every
-                        // page (image loads, players) up front, which hurts in albums with thousands of photos.
-                        Group {
-                            if abs(index - currentIndex) <= 2 {
-                                PhotoPageView(
-                                    asset: asset,
-                                    viewModel: viewModel,
-                                    isZoomed: $isZoomed,
-                                    onTap: { toggleChrome() }
-                                )
-                            } else {
-                                Color.clear
+                // Photo pager, edge to edge. A paging ScrollView rather than a page-style TabView:
+                // TabView stutters when its pages change under it, and this one only builds pages as they scroll in.
+                ScrollView(.horizontal) {
+                    LazyHStack(spacing: 0) {
+                        ForEach(Array(assets.enumerated()), id: \.element.id) { index, asset in
+                            // Far-away pages are released; they are always off screen, so swapping them is invisible.
+                            Group {
+                                if abs(index - currentIndex) <= 3 {
+                                    PhotoPageView(
+                                        asset: asset,
+                                        viewModel: viewModel,
+                                        isZoomed: $isZoomed,
+                                        onTap: { handleTap() }
+                                    )
+                                } else {
+                                    Color.clear
+                                }
                             }
+                            .containerRelativeFrame([.horizontal, .vertical])
+                            .id(index)
                         }
-                        .tag(index)
                     }
+                    .scrollTargetLayout()
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
+                .scrollTargetBehavior(.paging)
+                .scrollPosition(id: Binding(get: { currentIndex }, set: { if let new = $0 { currentIndex = new } }))
+                .scrollIndicators(.hidden)
+                .scrollDisabled(isZoomed) // a zoomed photo pans; it doesn't page
                 .ignoresSafeArea()
                 .simultaneousGesture(swipeUpForDetails)
                 .onChange(of: currentIndex) { _, _ in isZoomed = false }
@@ -146,6 +157,9 @@ struct AssetLightboxView: View {
             Text(saveError ?? "")
         }
         .animation(.easeInOut(duration: 0.25), value: showChrome)
+        .task(id: isSlideshow) { await runSlideshow() }
+        .onAppear { if startsSlideshow { startSlideshow() } }
+        .onDisappear { isSlideshow = false }
         .statusBarHidden(!showChrome) // dark status text would vanish on the black stage
         .navigationTransition(.zoom(sourceID: currentAsset?.id ?? "", in: zoomNamespace))
     }
@@ -170,6 +184,18 @@ struct AssetLightboxView: View {
             Spacer()
 
             Menu {
+                Button {
+                    startSlideshow()
+                } label: {
+                    Label("Play Slideshow", systemImage: "play.fill")
+                }
+                .disabled(assets.count < 2)
+                Picker("Slideshow Speed", selection: $slideshowSeconds) {
+                    Text("Slow (5 s)").tag(5.0)
+                    Text("Medium (3 s)").tag(3.0)
+                    Text("Fast (2 s)").tag(2.0)
+                }
+                Divider()
                 if viewModel.showMetadata {
                     Button {
                         showDetailsSheet = true
@@ -263,6 +289,7 @@ struct AssetLightboxView: View {
 
     private var thumbnailStrip: some View {
         ScrollViewReader { proxy in
+            GeometryReader { geo in
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 3) {
                     ForEach(Array(assets.enumerated()), id: \.element.id) { index, asset in
@@ -272,7 +299,7 @@ struct AssetLightboxView: View {
                             isVideo: viewModel.isVideo(asset)
                         )
                         .padding(.horizontal, currentIndex == index ? 5 : 0) // the current one opens a gap, like Photos
-                        .onTapGesture { currentIndex = index }
+                        .onTapGesture { withAnimation(.easeInOut(duration: 0.3)) { currentIndex = index } }
                         .accessibilityElement()
                         .accessibilityLabel(asset.originalFileName)
                         .accessibilityAddTraits(currentIndex == index ? [.isButton, .isSelected] : .isButton)
@@ -280,6 +307,8 @@ struct AssetLightboxView: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                .frame(minWidth: geo.size.width) // short albums: centred instead of hugging the left edge
+            }
             }
             .frame(height: 52)
             .animation(.easeInOut(duration: 0.2), value: currentIndex)
@@ -300,6 +329,56 @@ struct AssetLightboxView: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 showDetailsSheet = true
             }
+    }
+
+    /// A tap ends a running slideshow (restoring the chrome); otherwise it cycles the chrome.
+    private func handleTap() {
+        if isSlideshow {
+            stopSlideshow()
+        } else {
+            toggleChrome()
+        }
+    }
+
+    // MARK: - Slideshow
+
+    private func startSlideshow() {
+        guard assets.count > 1 else { return }
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showChrome = false // black stage, nothing else on screen
+            isSlideshow = true
+        }
+    }
+
+    private func stopSlideshow() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            isSlideshow = false
+            showChrome = true
+        }
+    }
+
+    /// Advances every `slideshowSeconds` while `isSlideshow`, looping, skipping videos. Cancelled by `.task(id:)`
+    /// when the slideshow stops or the viewer goes away. Keeps the screen awake meanwhile.
+    private func runSlideshow() async {
+        guard isSlideshow else { return }
+        UIApplication.shared.isIdleTimerDisabled = true
+        defer { UIApplication.shared.isIdleTimerDisabled = false }
+
+        while !Task.isCancelled && isSlideshow {
+            try? await Task.sleep(for: .seconds(slideshowSeconds))
+            guard !Task.isCancelled, isSlideshow else { break }
+            guard let next = nextImageIndex(after: currentIndex) else { stopSlideshow(); break }
+            withAnimation(.easeInOut(duration: 0.6)) { currentIndex = next }
+        }
+    }
+
+    private func nextImageIndex(after index: Int) -> Int? {
+        let count = assets.count
+        for step in 1...max(count, 1) {
+            let candidate = (index + step) % count
+            if assets[candidate].type == .image { return candidate }
+        }
+        return nil
     }
 
     private func toggleChrome() {

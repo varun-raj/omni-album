@@ -223,18 +223,7 @@ struct ContentView: View {
                             AlbumGridCell(album: album, cornerRadius: Self.albumCornerRadius)
                         }
                         .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Copy Link", systemImage: "doc.on.doc") {
-                                UIPasteboard.general.string = album.shareLink
-                            }
-                            ShareLink(item: album.shareLink) {
-                                Label("Share Link", systemImage: "square.and.arrow.up")
-                            }
-                            Divider()
-                            Button("Delete", systemImage: "trash", role: .destructive) {
-                                albumToDelete = album
-                            }
-                        }
+                        .contextMenu { albumMenu(album) }
                     }
                 }
                 .padding(Self.gridPadding)
@@ -257,6 +246,10 @@ struct ContentView: View {
                     NavigationLink(value: album) {
                         AlbumListCell(album: album)
                     }
+                    .contextMenu { albumMenu(album) }
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
                 }
                 .onDelete { indexSet in
                     albumToDelete = indexSet.first.map { filteredAlbums[$0] }
@@ -266,6 +259,20 @@ struct ContentView: View {
         .listStyle(.plain)
         .refreshable {
             await viewModel.refresh()
+        }
+    }
+
+    @ViewBuilder
+    private func albumMenu(_ album: DisplayAlbum) -> some View {
+        Button("Copy Link", systemImage: "doc.on.doc") {
+            UIPasteboard.general.string = album.shareLink
+        }
+        ShareLink(item: album.shareLink) {
+            Label("Share Link", systemImage: "square.and.arrow.up")
+        }
+        Divider()
+        Button("Delete", systemImage: "trash", role: .destructive) {
+            albumToDelete = album
         }
     }
 
@@ -368,16 +375,13 @@ struct AlbumListCell: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            // Thumbnail
-            thumbnailView
-                .frame(width: 70, height: 70)
-                .clipShape(.rect(cornerRadius: 10))
+            cover
+                .frame(width: 76, height: 76)
+                .clipShape(.rect(cornerRadius: 18))
 
-            // Album info
             VStack(alignment: .leading, spacing: 4) {
                 Text(album.albumName)
-                    .font(.body)
-                    .fontWeight(.medium)
+                    .font(.body.weight(.semibold))
                     .lineLimit(2)
                     .foregroundStyle(.primary)
 
@@ -385,44 +389,39 @@ struct AlbumListCell: View {
                     Text(albumCountLabel(album.assetCount))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-
-                    if album.allowUpload {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.blue)
-                            .accessibilityLabel("Uploads allowed")
-                    }
-
-                    if !album.allowDownload {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if !album.showMetadata {
-                        Image(systemName: "info.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
                     if album.password != nil {
                         Image(systemName: "lock.fill")
                             .font(.caption)
                             .foregroundStyle(.orange)
                             .accessibilityLabel("Password protected")
                     }
+                    if album.allowUpload {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                            .accessibilityLabel("Uploads allowed")
+                    }
+                    if !album.allowDownload {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Downloads disabled")
+                    }
                 }
 
-                // Server URL (truncated)
-                Text(serverDisplayName(album.baseURL))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    ProviderBadge(provider: album.provider, size: 14)
+                    Text(serverDisplayName(album.baseURL))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 4)
+        .padding(10)
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 26))
         .accessibilityElement(children: .combine)
     }
 
@@ -432,30 +431,21 @@ struct AlbumListCell: View {
     }
 
     private func serverDisplayName(_ baseURL: String) -> String {
-        guard let url = URL(string: baseURL), let host = url.host else {
-            return baseURL
-        }
-        return host
+        URL(string: baseURL)?.host ?? baseURL
     }
 
     @ViewBuilder
-    private var thumbnailView: some View {
-        let url = AggregatorViewModel.thumbnailURL(for: album)
-
-        ZStack(alignment: .bottomLeading) {
-            if let url = url {
-                CachedAsyncImage(url: url)
-            } else {
-                Rectangle()
-                    .fill(Color(.systemGray5))
-                    .overlay {
-                        Image(systemName: "photo.on.rectangle")
-                            .font(.title3)
-                            .foregroundStyle(.tertiary)
-                    }
-            }
-            ProviderBadge(provider: album.provider, size: 18)
-                .padding(4)
+    private var cover: some View {
+        if let url = AggregatorViewModel.thumbnailURL(for: album) {
+            CachedAsyncImage(url: url)
+        } else {
+            Rectangle()
+                .fill(Color(.systemGray5))
+                .overlay {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.title3)
+                        .foregroundStyle(.tertiary)
+                }
         }
     }
 }

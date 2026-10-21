@@ -10,6 +10,7 @@ import SwiftUI
 
 private struct LightboxSelection: Identifiable {
     let id: Int
+    var slideshow = false
 }
 
 struct AlbumDetailView: View {
@@ -52,6 +53,14 @@ struct AlbumDetailView: View {
                         }
 
                         Button {
+                            lightboxSelection = LightboxSelection(id: 0, slideshow: true)
+                        } label: {
+                            Image(systemName: "play.rectangle")
+                        }
+                        .disabled(viewModel.assets.count < 2)
+                        .accessibilityLabel("Play Slideshow")
+
+                        Button {
                             Task { await viewModel.refresh() }
                         } label: {
                             if viewModel.isLoading || viewModel.isRefreshing {
@@ -84,6 +93,7 @@ struct AlbumDetailView: View {
                     selectedIndex: selection.id,
                     viewModel: viewModel,
                     zoomNamespace: zoomNamespace,
+                    startSlideshow: selection.slideshow,
                     onDismiss: { lightboxSelection = nil }
                 )
             }

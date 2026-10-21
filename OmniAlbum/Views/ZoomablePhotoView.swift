@@ -37,8 +37,8 @@ struct ZoomablePhotoView: View {
                         .frame(maxWidth: geometry.size.width, maxHeight: geometry.size.height)
                         .scaleEffect(scale)
                         .offset(offset)
-                        .gesture(magnificationGesture)
-                        .gesture(scale > 1 ? panGesture : nil)
+                        .gesture(magnificationGesture(in: geometry.size))
+                        .gesture(scale > 1 ? panGesture(in: geometry.size) : nil)
                         .onTapGesture(count: 2, perform: doubleTapAction)
                         .onTapGesture(count: 1) { onTap?() }
                 } else if isLoading {
@@ -108,12 +108,23 @@ struct ZoomablePhotoView: View {
         }
     }
 
-    private var magnificationGesture: some Gesture {
+    /// Keeps the zoomed photo covering the screen: it can't be dragged past its own edges.
+    private func clamped(_ o: CGSize, in size: CGSize) -> CGSize {
+        guard let img = loadedImage, img.size.width > 0, img.size.height > 0 else { return o }
+        let fit = min(size.width / img.size.width, size.height / img.size.height)
+        let maxX = max(0, (img.size.width * fit * scale - size.width) / 2)
+        let maxY = max(0, (img.size.height * fit * scale - size.height) / 2)
+        return CGSize(width: min(max(o.width, -maxX), maxX), height: min(max(o.height, -maxY), maxY))
+    }
+
+    private func magnificationGesture(in size: CGSize) -> some Gesture {
         MagnificationGesture()
             .onChanged { value in
                 let delta = value / lastScale
                 lastScale = value
                 scale = min(max(scale * delta, minScale), maxScale)
+                offset = clamped(offset, in: size) // zooming out pulls the photo back toward the centre
+                lastOffset = offset
             }
             .onEnded { _ in
                 lastScale = 1
@@ -127,12 +138,13 @@ struct ZoomablePhotoView: View {
             }
     }
 
-    private var panGesture: some Gesture {
+    private func panGesture(in size: CGSize) -> some Gesture {
         DragGesture()
             .onChanged { value in
-                offset = CGSize(
-                    width: lastOffset.width + value.translation.width,
-                    height: lastOffset.height + value.translation.height
+                offset = clamped(
+                    CGSize(width: lastOffset.width + value.translation.width,
+                           height: lastOffset.height + value.translation.height),
+                    in: size
                 )
             }
             .onEnded { _ in

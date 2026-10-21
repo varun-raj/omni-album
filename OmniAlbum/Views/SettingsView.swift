@@ -16,6 +16,33 @@ enum SettingsKeys {
     static let wifiOnlyUpload = "wifiOnlyUpload"
 }
 
+// MARK: - Settings row label
+
+/// iOS-Settings-style label: white symbol on a small rounded colour square.
+private struct SettingsLabel: View {
+    let title: String
+    let symbol: String
+    let color: Color
+
+    init(_ title: String, symbol: String, color: Color) {
+        self.title = title
+        self.symbol = symbol
+        self.color = color
+    }
+
+    var body: some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 29, height: 29)
+                .background(color.gradient, in: .rect(cornerRadius: 7))
+        }
+    }
+}
+
 // MARK: - Settings View
 
 struct SettingsView: View {
@@ -35,10 +62,10 @@ struct SettingsView: View {
                 // Sync Section
                 Section {
                     Toggle(isOn: $iCloudSyncEnabled) {
-                        Label("iCloud Sync", systemImage: "icloud")
+                        SettingsLabel("iCloud Sync", symbol: "icloud", color: .blue)
                     }
                     Toggle(isOn: $wifiOnlyUpload) {
-                        Label("Wi-Fi Only Uploads", systemImage: "wifi")
+                        SettingsLabel("Wi-Fi Only Uploads", symbol: "wifi", color: .green)
                     }
                 } header: {
                     Text("Sync")
@@ -51,14 +78,14 @@ struct SettingsView: View {
                     NavigationLink {
                         CacheSettingsView()
                     } label: {
-                        Label("Cache Settings", systemImage: "internaldrive")
+                        SettingsLabel("Cache Settings", symbol: "internaldrive", color: .gray)
                     }
 
                     NavigationLink {
                         UploadQueueView()
                     } label: {
                         HStack {
-                            Label("Upload Queue", systemImage: "arrow.up.circle")
+                            SettingsLabel("Upload Queue", symbol: "arrow.up.circle", color: .orange)
                             Spacer()
                             uploadStatusBadge
                         }
@@ -70,13 +97,13 @@ struct SettingsView: View {
                     Button {
                         exportAlbumsToCSV()
                     } label: {
-                        Label("Export Albums to CSV", systemImage: "square.and.arrow.up")
+                        SettingsLabel("Export Albums to CSV", symbol: "square.and.arrow.up", color: .indigo)
                     }
 
                     Button {
                         showingImportPicker = true
                     } label: {
-                        Label("Import Albums from CSV", systemImage: "square.and.arrow.down")
+                        SettingsLabel("Import Albums from CSV", symbol: "square.and.arrow.down", color: .indigo)
                     }
                 } header: {
                     Text("Data")
@@ -87,7 +114,7 @@ struct SettingsView: View {
                 // About Section
                 Section("About") {
                     HStack {
-                        Label("Version", systemImage: "info.circle")
+                        SettingsLabel("Version", symbol: "info.circle", color: .gray)
                         Spacer()
                         Text(appVersion)
                             .foregroundStyle(.secondary)
@@ -95,7 +122,7 @@ struct SettingsView: View {
 
                     Link(destination: URL(string: "https://micro.skcript.com/omni-album")!) {
                         HStack {
-                            Label("OmniAlbum Website", systemImage: "globe")
+                            SettingsLabel("OmniAlbum Website", symbol: "globe", color: .blue)
                             Spacer()
                             Image(systemName: "arrow.up.right")
                                 .font(.caption)
@@ -105,7 +132,7 @@ struct SettingsView: View {
 
                     Link(destination: URL(string: "https://apps.apple.com/us/app/omni-album/id6759308996")!) {
                         HStack {
-                            Label("View on App Store", systemImage: "apple.logo")
+                            SettingsLabel("View on App Store", symbol: "apple.logo", color: .black)
                             Spacer()
                             Image(systemName: "arrow.up.right")
                                 .font(.caption)
@@ -119,12 +146,12 @@ struct SettingsView: View {
                     Button {
                         requestAppReview()
                     } label: {
-                        Label("Rate on App Store", systemImage: "star")
+                        SettingsLabel("Rate on App Store", symbol: "star", color: .yellow)
                     }
 
                     Link(destination: URL(string: "https://skcript-micro.featureos.app/b/omni-album")!) {
                         HStack {
-                            Label("Send Feedback", systemImage: "envelope")
+                            SettingsLabel("Send Feedback", symbol: "envelope", color: .teal)
                             Spacer()
                             Image(systemName: "arrow.up.right")
                                 .font(.caption)
@@ -134,7 +161,7 @@ struct SettingsView: View {
 
                     Link(destination: URL(string: "https://twitter.com/immaborh")!) {
                         HStack {
-                            Label("Follow on X", systemImage: "at")
+                            SettingsLabel("Follow on X", symbol: "at", color: .black)
                             Spacer()
                             Image(systemName: "arrow.up.right")
                                 .font(.caption)
