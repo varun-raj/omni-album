@@ -41,6 +41,10 @@ struct AlbumDetailView: View {
             .navigationBarTitleDisplayMode(.inline) // the grid is its own scroll view, so a large title could never collapse
             .albumSubtitle(summaryText)
             .background(BarsFader(hidden: isViewing))
+            .statusBarHidden(isViewing)
+            // Opaque bar: the grid starts below it and tiles scrolling up are hidden behind it, not shown through it.
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(Color(.systemBackground), for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 16) {

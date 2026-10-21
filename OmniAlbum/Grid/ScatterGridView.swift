@@ -148,7 +148,24 @@ public final class ScatterGridView: ScatterPlatformView {
     public func glideNextLayout(within seconds: Double = 0.35) { glideUntil = CACurrentMediaTime() + seconds }
 
     var tiles: [CALayer] = [], frames: [CGRect] = [], layers: [String: CALayer] = [:]
-    var hovered: CALayer?, opened: CALayer?
+    var hovered: CALayer?
+    var opened: CALayer? {
+        didSet { if (oldValue == nil) != (opened == nil) { applyStageBackground() } }
+    }
+    /// OmniAlbum: `config.openBackground` fades in while a tile is open (a dark stage), back out on close.
+    func applyStageBackground() {
+        let c = opened != nil ? (config.openBackground ?? config.background) : config.background
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(opened != nil ? config.openDuration : config.closeDuration)
+        root.backgroundColor = c
+        CATransaction.commit()
+        #if os(iOS)
+        UIView.animate(withDuration: opened != nil ? config.openDuration : config.closeDuration) {
+            self.backgroundColor = UIColor(cgColor: c) // the view's own layer only animates inside a UIView block
+            self.scrollView?.backgroundColor = UIColor(cgColor: c)
+        }
+        #endif
+    }
     var staged: CALayer?, dragBase: CGFloat = 0, dismissing = false // pager: the neighbour waiting beside the open tile
     var glide = false, glideUntil: CFTimeInterval = 0
     var swiped = false // this swipe already stepped / this pinch already opened, once per gesture

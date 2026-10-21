@@ -50,6 +50,7 @@ struct ScatterPhotoGrid: View {
         c.columns = horizontalSizeClass == .regular ? 6 : 3
         c.gap = 2
         c.edgeInset = 0 // edge to edge
+        c.openBackground = CGColor(gray: 0, alpha: 1) // dark stage for viewing
         c.stageMargin = 0 // opened photo fills the viewport
         // Critically damped and a touch slower than the defaults: no overshoot, steadier pace.
         c.item = .bounce(0, response: 0.4)
