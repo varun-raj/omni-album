@@ -172,10 +172,10 @@ private struct AccountTimeline: View {
                 Text("\(viewModel.progress.phase) \(viewModel.progress.linesRead) changes")
                     .font(.footnote).foregroundStyle(.secondary)
             } else if let counts = viewModel.counts {
-                Text("\(counts.assets) photos & videos · \(counts.albums) albums")
+                Text("\(counts.assets) photos & videos · \(counts.albums) album\(counts.albums == 1 ? "" : "s")")
                     .font(.footnote).foregroundStyle(.secondary)
                 if let last = viewModel.lastSyncText {
-                    let took = viewModel.lastSummary.map { String(format: " in %.1f s, %d changes", $0.duration, $0.linesRead) } ?? ""
+                    let took = viewModel.lastSummary.map { String(format: " in %.1f s", $0.duration) + ($0.applied == 0 ? ", nothing new" : ", \($0.applied) changes") } ?? ""
                     Text("Synced \(last)\(took)").font(.caption).foregroundStyle(.tertiary)
                 }
             }
