@@ -5,6 +5,7 @@
 //  Global singleton managing the upload queue with persistence.
 //
 
+import os
 import Foundation
 import Combine
 import Network
@@ -83,31 +84,31 @@ final class UploadQueueService: ObservableObject {
                 startProcessing()
             }
         } catch {
-            print("Failed to restore upload queue: \(error)")
+            Log.upload.error("Failed to restore upload queue: \(error)")
         }
     }
 
     /// Add new upload tasks to the queue
     func addTasks(_ tasks: [UploadTask]) {
-        print("UploadQueue: Adding \(tasks.count) tasks")
+        Log.upload.notice("UploadQueue: Adding \(tasks.count) tasks")
         queue.append(contentsOf: tasks)
         persistQueue()
-        print("UploadQueue: Queue now has \(queue.count) items, starting processing")
+        Log.upload.notice("UploadQueue: Queue now has \(self.queue.count) items, starting processing")
         startProcessing()
     }
 
     /// Start processing the queue
     func startProcessing() {
         guard !isProcessing else {
-            print("UploadQueue: Already processing, skipping")
+            Log.upload.notice("UploadQueue: Already processing, skipping")
             return
         }
         guard queue.contains(where: { $0.status == .pending }) else {
-            print("UploadQueue: No pending tasks to process")
+            Log.upload.notice("UploadQueue: No pending tasks to process")
             return
         }
 
-        print("UploadQueue: Starting processing")
+        Log.upload.notice("UploadQueue: Starting processing")
         isProcessing = true
         processingTask = Task {
             await processQueue()
@@ -198,13 +199,13 @@ final class UploadQueueService: ObservableObject {
     // MARK: - Private Methods
 
     private func processQueue() async {
-        print("UploadQueue: processQueue started")
+        Log.upload.notice("UploadQueue: processQueue started")
         var isFirstUpload = true
 
         while !Task.isCancelled {
             // Check Wi-Fi requirement
             if wifiOnlyUpload && !isOnWiFi {
-                print("UploadQueue: Wi-Fi only mode, waiting for Wi-Fi...")
+                Log.upload.notice("UploadQueue: Wi-Fi only mode, waiting for Wi-Fi...")
                 isWaitingForWiFi = true
                 isProcessing = false
                 endActivityIfNeeded()
@@ -213,7 +214,7 @@ final class UploadQueueService: ObservableObject {
 
             // Find next pending task
             guard let nextIndex = queue.firstIndex(where: { $0.status == .pending }) else {
-                print("UploadQueue: No more pending tasks, stopping")
+                Log.upload.notice("UploadQueue: No more pending tasks, stopping")
                 isProcessing = false
                 activeUpload = nil
                 endActivityIfNeeded()
@@ -221,7 +222,7 @@ final class UploadQueueService: ObservableObject {
             }
 
             // Mark as uploading
-            print("UploadQueue: Uploading task at index \(nextIndex): \(queue[nextIndex].fileName)")
+            Log.upload.notice("UploadQueue: Uploading task at index \(nextIndex): \(self.queue[nextIndex].fileName)")
             queue[nextIndex].status = .uploading
             activeUpload = queue[nextIndex]
             persistQueue()
@@ -259,7 +260,7 @@ final class UploadQueueService: ObservableObject {
                 }
 
                 // Success. Task may have been removed while uploading; re-resolve by id.
-                print("UploadQueue: Upload succeeded for \(currentTask.fileName), assetId: \(assetId)")
+                Log.upload.notice("UploadQueue: Upload succeeded for \(currentTask.fileName), assetId: \(assetId)")
                 if let index = queue.firstIndex(where: { $0.id == taskId }) {
                     queue[index].status = .completed
                     queue[index].progress = 1.0
@@ -280,7 +281,7 @@ final class UploadQueueService: ObservableObject {
             } catch {
                 // Cancelled by pauseAll: it already reset the task to pending.
                 if Task.isCancelled { return }
-                print("UploadQueue: Upload failed for \(failedTaskId): \(error.localizedDescription)")
+                Log.upload.error("UploadQueue: Upload failed for \(failedTaskId): \(error.localizedDescription)")
                 if let index = queue.firstIndex(where: { $0.id == failedTaskId }) {
                     queue[index].status = .failed
                     queue[index].errorMessage = error.localizedDescription
@@ -316,7 +317,7 @@ final class UploadQueueService: ObservableObject {
             do {
                 try await self.persistenceService.save(queue)
             } catch {
-                print("Failed to persist upload queue: \(error)")
+                Log.upload.error("Failed to persist upload queue: \(error)")
             }
         }
     }
@@ -327,14 +328,14 @@ final class UploadQueueService: ObservableObject {
     @available(iOS 16.2, *)
     private func startLiveActivity(for task: UploadTask) {
         let authInfo = ActivityAuthorizationInfo()
-        print("Live Activity - areActivitiesEnabled: \(authInfo.areActivitiesEnabled)")
-        print("Live Activity - frequentPushesEnabled: \(authInfo.frequentPushesEnabled)")
+        Log.upload.notice("Live Activity - areActivitiesEnabled: \(authInfo.areActivitiesEnabled)")
+        Log.upload.notice("Live Activity - frequentPushesEnabled: \(authInfo.frequentPushesEnabled)")
 
         guard authInfo.areActivitiesEnabled else {
             let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
                 ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
                 ?? "App"
-            print("Live Activities are not enabled - check Settings > \(appName) > Live Activities")
+            Log.upload.notice("Live Activities are not enabled - check Settings > \(appName) > Live Activities")
             return
         }
 
@@ -364,11 +365,11 @@ final class UploadQueueService: ObservableObject {
                 pushType: nil
             )
             currentActivity = activity
-            print("Live Activity started successfully: \(activity.id)")
+            Log.upload.notice("Live Activity started successfully: \(activity.id)")
         } catch {
-            print("Failed to start Live Activity: \(error.localizedDescription)")
+            Log.upload.error("Failed to start Live Activity: \(error.localizedDescription)")
             if let activityError = error as? ActivityAuthorizationError {
-                print("ActivityAuthorizationError: \(activityError)")
+                Log.upload.error("ActivityAuthorizationError: \(activityError)")
             }
         }
     }
@@ -404,7 +405,7 @@ final class UploadQueueService: ObservableObject {
 
         Task {
             await activity.end(nil, dismissalPolicy: .immediate)
-            print("Live Activity ended: \(activity.id)")
+            Log.upload.notice("Live Activity ended: \(activity.id)")
         }
         currentActivity = nil
     }

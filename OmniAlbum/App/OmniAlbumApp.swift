@@ -5,6 +5,7 @@
 //  Created by Varun on 04/02/26.
 //
 
+import os
 import SwiftUI
 import CoreSpotlight
 import BackgroundTasks
@@ -107,9 +108,9 @@ struct OmniAlbumApp: App {
 
         do {
             try BGTaskScheduler.shared.submit(request)
-            print("Background upload task scheduled")
+            Log.app.notice("Background upload task scheduled")
         } catch {
-            print("Failed to schedule background upload: \(error.localizedDescription)")
+            Log.app.error("Failed to schedule background upload: \(error.localizedDescription)")
         }
     }
 }

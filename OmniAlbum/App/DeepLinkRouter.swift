@@ -15,7 +15,8 @@ struct DeepLinkTarget {
 }
 
 /// Shared router that holds pending deep link state, observed by navigation views
-class DeepLinkRouter: ObservableObject {
+@MainActor
+final class DeepLinkRouter: ObservableObject {
     @Published var pendingTarget: DeepLinkTarget?
     @Published var selectedTab: Int = 0
 

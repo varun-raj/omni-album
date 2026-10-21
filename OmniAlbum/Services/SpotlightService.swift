@@ -5,6 +5,7 @@
 //  Indexes albums in Core Spotlight for system-wide search.
 //
 
+import os
 import Foundation
 import CoreSpotlight
 
@@ -30,7 +31,7 @@ final class SpotlightService {
 
         searchableIndex.indexSearchableItems([item]) { error in
             if let error {
-                print("Spotlight: Failed to index album \(album.albumName): \(error.localizedDescription)")
+                Log.app.error("Spotlight: Failed to index album \(album.albumName): \(error.localizedDescription)")
             }
         }
     }
@@ -54,7 +55,7 @@ final class SpotlightService {
 
         searchableIndex.indexSearchableItems(items) { error in
             if let error {
-                print("Spotlight: Failed to index albums: \(error.localizedDescription)")
+                Log.app.error("Spotlight: Failed to index albums: \(error.localizedDescription)")
             }
         }
     }
@@ -63,7 +64,7 @@ final class SpotlightService {
     func deindexAlbum(albumId: String) {
         searchableIndex.deleteSearchableItems(withIdentifiers: [albumId]) { error in
             if let error {
-                print("Spotlight: Failed to deindex album \(albumId): \(error.localizedDescription)")
+                Log.app.error("Spotlight: Failed to deindex album \(albumId): \(error.localizedDescription)")
             }
         }
     }
@@ -72,7 +73,7 @@ final class SpotlightService {
     func deindexAll() {
         searchableIndex.deleteSearchableItems(withDomainIdentifiers: ["com.skcript.omnialbum.albums"]) { error in
             if let error {
-                print("Spotlight: Failed to deindex all: \(error.localizedDescription)")
+                Log.app.error("Spotlight: Failed to deindex all: \(error.localizedDescription)")
             }
         }
     }

@@ -5,6 +5,7 @@
 //  Local-first album list: loads from local cache instantly, then syncs with CloudKit.
 //
 
+import os
 import Foundation
 import Combine
 import SwiftUI
@@ -171,7 +172,7 @@ final class AggregatorViewModel: ObservableObject {
                 do {
                     try await cloudKitService.save(updatedAlbum)
                 } catch {
-                    print("Failed to update CloudKit with album data: \(error.localizedDescription)")
+                    Log.sync.error("Failed to update CloudKit with album data: \(error.localizedDescription)")
                 }
             }
         }
@@ -181,7 +182,7 @@ final class AggregatorViewModel: ObservableObject {
     func syncWithCloudKit() async {
         // Skip CloudKit sync if disabled
         guard iCloudSyncEnabled else {
-            print("iCloud sync is disabled, skipping CloudKit sync")
+            Log.sync.notice("iCloud sync is disabled, skipping CloudKit sync")
             return
         }
 
@@ -215,7 +216,7 @@ final class AggregatorViewModel: ObservableObject {
         } catch {
             // Don't overwrite local data on sync failure
             // Just log the error - user can still use local data
-            print("CloudKit sync failed: \(error.localizedDescription)")
+            Log.sync.error("CloudKit sync failed: \(error.localizedDescription)")
 
             // Only show error if we have no local data
             if albums.isEmpty {
@@ -292,7 +293,7 @@ final class AggregatorViewModel: ObservableObject {
                     do {
                         try await cloudKitService.save(display)
                     } catch {
-                        print("Failed to save to CloudKit: \(error.localizedDescription)")
+                        Log.sync.error("Failed to save to CloudKit: \(error.localizedDescription)")
                         // Local save succeeded, so don't show error to user
                         // CloudKit will sync on next launch
                     }
@@ -320,7 +321,7 @@ final class AggregatorViewModel: ObservableObject {
                 do {
                     try await cloudKitService.delete(albumId: album.id)
                 } catch {
-                    print("Failed to delete from CloudKit: \(error.localizedDescription)")
+                    Log.sync.error("Failed to delete from CloudKit: \(error.localizedDescription)")
                     // Local delete succeeded, CloudKit will sync on next launch
                 }
             }

@@ -5,6 +5,7 @@
 //  Local JSON storage for albums - provides instant loading before CloudKit sync.
 //
 
+import os
 import Foundation
 
 /// Codable version of DisplayAlbum for JSON storage
@@ -120,7 +121,7 @@ final class LocalAlbumsService {
             let sorted = stored.sorted { $0.createdAt > $1.createdAt }
             return sorted.map { $0.toDisplayAlbum() }
         } catch {
-            print("LocalAlbumsService: Failed to load albums: \(error)")
+            Log.sync.error("LocalAlbumsService: Failed to load albums: \(error)")
             return []
         }
     }
@@ -142,7 +143,7 @@ final class LocalAlbumsService {
             let data = try JSONEncoder().encode(stored)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            print("LocalAlbumsService: Failed to save albums: \(error)")
+            Log.sync.error("LocalAlbumsService: Failed to save albums: \(error)")
         }
     }
 
@@ -221,7 +222,7 @@ final class LocalAlbumsService {
             let data = try JSONEncoder().encode(albums)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            print("LocalAlbumsService: Failed to save albums: \(error)")
+            Log.sync.error("LocalAlbumsService: Failed to save albums: \(error)")
         }
     }
 }

@@ -5,6 +5,7 @@
 //  Photo picker for selecting images to upload to an album.
 //
 
+import os
 import SwiftUI
 import PhotosUI
 import UIKit
@@ -181,11 +182,11 @@ struct PhotoPickerView: View {
 
     private func uploadSelected() {
         guard !selectedAssets.isEmpty else {
-            print("Upload: No assets selected")
+            Log.upload.notice("Upload: No assets selected")
             return
         }
 
-        print("Upload: Starting upload of \(selectedAssets.count) assets")
+        Log.upload.notice("Upload: Starting upload of \(selectedAssets.count) assets")
         isProcessing = true
         processedCount = 0
 
@@ -210,17 +211,9 @@ struct PhotoPickerView: View {
 
         // Add all tasks to the queue
         if !tasks.isEmpty {
-            print("Upload: Adding \(tasks.count) tasks to queue")
+            Log.upload.notice("Upload: Adding \(tasks.count) tasks to queue")
             UploadQueueService.shared.addTasks(tasks)
-            print("Upload: Tasks added, queue now has \(UploadQueueService.shared.queue.count) items")
-
-            // Refresh album data after uploads complete
-            Task {
-                // Wait a moment for uploads to start processing
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                // Trigger refresh on the album view model
-                await AlbumDetailViewModel.instance(for: album.albumId)?.refresh()
-            }
+            Log.upload.notice("Upload: Tasks added, queue now has \(UploadQueueService.shared.queue.count) items")
         }
 
         isProcessing = false
@@ -333,10 +326,10 @@ struct PHPickerRepresentable: UIViewControllerRepresentable {
 
             // Get asset identifiers
             let identifiers = results.compactMap { $0.assetIdentifier }
-            print("PhotoPicker: Selected \(results.count) items, got \(identifiers.count) identifiers")
+            Log.upload.notice("PhotoPicker: Selected \(results.count) items, got \(identifiers.count) identifiers")
 
             guard !identifiers.isEmpty else {
-                print("PhotoPicker: No asset identifiers found - user may have limited photo access")
+                Log.upload.notice("PhotoPicker: No asset identifiers found - user may have limited photo access")
                 return
             }
 
@@ -393,11 +386,11 @@ struct PHPickerRepresentable: UIViewControllerRepresentable {
                 }
 
                 // Update UI on main thread
-                print("PhotoPicker: Processed \(assets.count) assets with thumbnails")
+                Log.upload.notice("PhotoPicker: Processed \(assets.count) assets with thumbnails")
                 DispatchQueue.main.async {
                     self.parent.selectedAssets.append(contentsOf: assets)
                     self.parent.isLoading = false
-                    print("PhotoPicker: Updated selectedAssets, now has \(self.parent.selectedAssets.count) items")
+                    Log.upload.notice("PhotoPicker: Updated selectedAssets, now has \(self.parent.selectedAssets.count) items")
                 }
             }
         }

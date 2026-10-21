@@ -23,20 +23,10 @@ final class AlbumDetailViewModel: ObservableObject {
     private let provider: any ShareLinkProvider
     let album: DisplayAlbum
 
-    /// Shared instance cache for refreshing after upload
-    private static var instances: [String: WeakRef<AlbumDetailViewModel>] = [:]
-
     init(album: DisplayAlbum) {
         self.album = album
         self.provider = ProviderRegistry.shared.provider(for: album.provider)
             ?? ProviderRegistry.shared.provider(for: .immich)!
-        // Register this instance for later refresh
-        Self.instances[album.albumId] = WeakRef(self)
-    }
-
-    /// Get the active view model for an album (if any)
-    static func instance(for albumId: String) -> AlbumDetailViewModel? {
-        return instances[albumId]?.value
     }
 
     /// Computes date range text from assets (e.g., "Jan 2024" or "Jan - Mar 2024")
@@ -250,14 +240,5 @@ final class AlbumDetailViewModel: ObservableObject {
     /// Check if asset is a video
     func isVideo(_ asset: Asset) -> Bool {
         asset.type == .video
-    }
-}
-
-// MARK: - Weak Reference Wrapper
-
-private class WeakRef<T: AnyObject> {
-    weak var value: T?
-    init(_ value: T) {
-        self.value = value
     }
 }

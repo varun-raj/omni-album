@@ -5,6 +5,7 @@
 //  Handles uploading assets to Immich API via multipart/form-data.
 //
 
+import os
 import Foundation
 import Photos
 import UIKit
@@ -51,7 +52,7 @@ final class ImmichUploadService {
         task: UploadTask,
         progressHandler: @escaping (Double) -> Void
     ) async throws -> String {
-        print("Upload: Starting upload for \(task.fileName) to album \(task.albumId)")
+        Log.upload.notice("Upload: Starting upload for \(task.fileName) to album \(task.albumId)")
         // Fetch the PHAsset
         let fetchResult = PHAsset.fetchAssets(
             withLocalIdentifiers: [task.localAssetIdentifier],
@@ -98,7 +99,7 @@ final class ImmichUploadService {
 
         // Log the raw response for debugging
         let responseString = String(data: data, encoding: .utf8) ?? "Unable to decode response"
-        print("Upload API Response [\(httpResponse.statusCode)]: \(responseString)")
+        Log.upload.notice("Upload API Response [\(httpResponse.statusCode)]: \(responseString)")
 
         if httpResponse.statusCode == 201 || httpResponse.statusCode == 200 {
             // Parse response to get asset ID
@@ -107,14 +108,14 @@ final class ImmichUploadService {
             let decoder = JSONDecoder()
             do {
                 let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
-                print("Upload successful - Asset ID: \(uploadResponse.id), Status: \(uploadResponse.status ?? "nil"), Duplicate: \(uploadResponse.duplicate ?? false)")
+                Log.upload.notice("Upload successful - Asset ID: \(uploadResponse.id), Status: \(uploadResponse.status ?? "nil"), Duplicate: \(uploadResponse.duplicate ?? false)")
                 assetId = uploadResponse.id
             } catch {
-                print("Failed to decode upload response: \(error)")
+                Log.upload.error("Failed to decode upload response: \(error)")
                 // Try to extract ID from raw response if possible
                 if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let id = json["id"] as? String {
-                    print("Extracted asset ID from raw JSON: \(id)")
+                    Log.upload.notice("Extracted asset ID from raw JSON: \(id)")
                     assetId = id
                 }
             }
@@ -124,7 +125,7 @@ final class ImmichUploadService {
             }
 
             // Add the asset to the album
-            print("Adding asset \(finalAssetId) to album \(task.albumId)...")
+            Log.upload.notice("Adding asset \(finalAssetId) to album \(task.albumId)...")
             try await addAssetToAlbum(
                 assetId: finalAssetId,
                 albumId: task.albumId,
@@ -136,7 +137,7 @@ final class ImmichUploadService {
             return finalAssetId
         } else {
             let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-            print("Upload failed with status \(httpResponse.statusCode): \(errorMessage)")
+            Log.upload.error("Upload failed with status \(httpResponse.statusCode): \(errorMessage)")
             throw ImmichUploadError.uploadFailed("Status \(httpResponse.statusCode): \(errorMessage)")
         }
     }
@@ -171,10 +172,10 @@ final class ImmichUploadService {
         }
 
         let responseString = String(data: data, encoding: .utf8) ?? "Unable to decode"
-        print("Add to album response [\(httpResponse.statusCode)]: \(responseString)")
+        Log.upload.notice("Add to album response [\(httpResponse.statusCode)]: \(responseString)")
 
         if httpResponse.statusCode != 200 && httpResponse.statusCode != 201 {
-            print("Warning: Failed to add asset to album (status \(httpResponse.statusCode)), but upload succeeded")
+            Log.upload.error("Warning: Failed to add asset to album (status \(httpResponse.statusCode)), but upload succeeded")
             // Don't throw - the upload itself succeeded
         }
     }
