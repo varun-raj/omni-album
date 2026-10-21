@@ -49,6 +49,9 @@ struct SettingsView: View {
     @AppStorage(SettingsKeys.iCloudSyncEnabled) private var iCloudSyncEnabled = true
     @AppStorage(SettingsKeys.wifiOnlyUpload) private var wifiOnlyUpload = false
     @ObservedObject private var uploadService = UploadQueueService.shared
+    @ObservedObject private var hub = ImmichHub.shared
+    @State private var showingAddAccount = false
+    @State private var accountToSignOut: ImmichAccountInfo?
 
     @State private var showingImportPicker = false
     @State private var importError: String?
@@ -59,6 +62,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                immichAccountsSection
+
                 // Sync Section
                 Section {
                     Toggle(isOn: $iCloudSyncEnabled) {
@@ -90,19 +95,6 @@ struct SettingsView: View {
                             uploadStatusBadge
                         }
                     }
-                }
-
-                // Account (beta)
-                Section {
-                    NavigationLink {
-                        ImmichAccountView()
-                    } label: {
-                        SettingsLabel("Immich Account", symbol: "person.crop.circle", color: .purple)
-                    }
-                } header: {
-                    Text("Beta")
-                } footer: {
-                    Text("Sign in to an Immich server and browse your whole library, synced to this device.")
                 }
 
                 // Data Section
@@ -185,6 +177,17 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .sheet(isPresented: $showingAddAccount) { AddImmichAccountSheet() }
+            .confirmationDialog(
+                "Sign out of \(accountToSignOut?.email ?? "this account")?",
+                isPresented: Binding(get: { accountToSignOut != nil }, set: { if !$0 { accountToSignOut = nil } }),
+                titleVisibility: .visible,
+                presenting: accountToSignOut
+            ) { account in
+                Button("Sign Out", role: .destructive) { Task { await hub.remove(account.id) } }
+            } message: { _ in
+                Text("The copy of this library on your device is deleted, and its albums leave the Albums tab. Nothing on the server is touched.")
+            }
             .fileImporter(
                 isPresented: $showingImportPicker,
                 allowedContentTypes: [.commaSeparatedText],
@@ -293,6 +296,50 @@ struct SettingsView: View {
             importError = error.localizedDescription
             showingImportError = true
         }
+    }
+
+    // MARK: - Immich accounts
+
+    private var immichAccountsSection: some View {
+        Section {
+            ForEach(hub.accounts) { account in
+                NavigationLink {
+                    ImmichAccountView(accountID: account.id)
+                } label: {
+                    HStack(spacing: 12) {
+                        ProviderBadge(provider: .immich, size: 29)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(account.email)
+                            Text(accountStatus(account))
+                                .font(.caption)
+                                .foregroundStyle(hub.status[account.id]?.error == nil ? Color.secondary : Color.red)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        if hub.status[account.id]?.isSyncing == true { ProgressView() }
+                    }
+                }
+                .swipeActions(edge: .trailing) {
+                    Button("Sign Out", role: .destructive) { accountToSignOut = account }
+                }
+            }
+            Button {
+                showingAddAccount = true
+            } label: {
+                SettingsLabel(hub.accounts.isEmpty ? "Sign In to Immich" : "Add Another Account", symbol: "plus", color: .green)
+            }
+        } header: {
+            Text("Immich Accounts")
+        } footer: {
+            Text("Sign in to browse your whole Immich library. Add as many accounts as you like, on any server. Their albums appear in the Albums tab. Swipe an account to sign out.")
+        }
+    }
+
+    private func accountStatus(_ account: ImmichAccountInfo) -> String {
+        guard let status = hub.status[account.id] else { return account.host }
+        if let error = status.error { return error }
+        if status.isSyncing { return "\(account.host) · syncing, \(status.progress.linesRead.formatted()) changes" }
+        return account.host
     }
 
     @ViewBuilder

@@ -44,6 +44,8 @@ final class ImmichHub: ObservableObject {
         var error: String?
     }
 
+    /// Signed-in accounts, in sign-in order.
+    @Published private(set) var accounts: [ImmichAccountInfo] = []
     /// Albums of every account, most recently changed first.
     @Published private(set) var albums: [AccountAlbum] = []
     @Published private(set) var status: [String: SyncStatus] = [:]
@@ -56,6 +58,7 @@ final class ImmichHub: ObservableObject {
 
     init(session: ImmichAccountSession = .shared) {
         self.session = session
+        accounts = session.accounts
     }
 
     var isSyncingAny: Bool { status.values.contains { $0.isSyncing } }
@@ -85,7 +88,17 @@ final class ImmichHub: ObservableObject {
     @discardableResult
     func add(_ creds: ImmichCredentials) -> AccountLibrary? {
         session.add(creds)
+        accounts = session.accounts
         return openLibrary(for: creds.id)
+    }
+
+    /// Signs in to a server (adding the account, or refreshing its session) and starts its first sync.
+    @discardableResult
+    func signIn(server: String, email: String, password: String) async throws -> ImmichAccountInfo {
+        let creds = try await ImmichAccountClient.signIn(server: server, email: email, password: password)
+        add(creds)
+        Task { await sync(creds.id) }
+        return creds.info
     }
 
     func attach(_ library: AccountLibrary) {
@@ -101,6 +114,7 @@ final class ImmichHub: ObservableObject {
             for suffix in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: path + suffix) }
         }
         session.remove(id)
+        accounts = session.accounts
         await reloadAlbums()
         dataVersion = UUID()
     }

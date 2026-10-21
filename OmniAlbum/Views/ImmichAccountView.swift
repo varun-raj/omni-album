@@ -8,99 +8,14 @@
 import SwiftUI
 
 struct ImmichAccountView: View {
+    let accountID: String
     @StateObject private var viewModel = ImmichAccountViewModel()
 
     var body: some View {
-        Group {
-            if viewModel.activeAccount == nil {
-                SignInForm(viewModel: viewModel)
-            } else {
-                AccountTimeline(viewModel: viewModel)
-            }
-        }
-        .navigationTitle("Immich Account")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-// MARK: - Sign in
-
-private struct SignInForm: View {
-    @ObservedObject var viewModel: ImmichAccountViewModel
-    @State private var server = ""
-    @State private var email = ""
-    @State private var password = ""
-
-    private var canSignIn: Bool { !server.isEmpty && !email.isEmpty && !password.isEmpty && !viewModel.isSigningIn }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Sign in to browse your whole library, not just shared links. It's copied to this device once, then only changes sync.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                field("Server", symbol: "server.rack") {
-                    TextField("https://photos.example.com", text: $server)
-                        .textContentType(.URL).keyboardType(.URL)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                }
-                field("Email", symbol: "envelope") {
-                    TextField("you@example.com", text: $email)
-                        .textContentType(.username).keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                }
-                field("Password", symbol: "lock") {
-                    SecureField("Password", text: $password).textContentType(.password)
-                }
-
-                Text("Syncing needs a normal sign-in. Immich doesn't allow API keys to sync.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                if let error = viewModel.errorMessage {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.red.opacity(0.1), in: .rect(cornerRadius: 16))
-                }
-            }
-            .padding(20)
-        }
-        .safeAreaInset(edge: .bottom) {
-            Button {
-                Task { await viewModel.signIn(server: server, email: email, password: password) }
-            } label: {
-                HStack(spacing: 8) {
-                    if viewModel.isSigningIn { ProgressView().tint(.white) }
-                    Text(viewModel.isSigningIn ? "Signing in…" : "Sign In").font(.body.weight(.semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-            }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .controlSize(.large)
-            .disabled(!canSignIn)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(.bar)
-        }
-    }
-
-    private func field<Content: View>(_ title: String, symbol: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.footnote.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 4)
-            HStack(spacing: 10) {
-                Image(systemName: symbol).foregroundStyle(.secondary)
-                content()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 20))
-        }
+        AccountTimeline(viewModel: viewModel)
+            .navigationTitle(viewModel.activeAccount?.email ?? "Immich")
+            .navigationBarTitleDisplayMode(.inline)
+            .task { await viewModel.switchAccount(to: accountID) }
     }
 }
 
@@ -129,7 +44,7 @@ extension View {
 // MARK: - Account screen
 
 private enum AccountTab: String, CaseIterable, Identifiable {
-    case photos = "Photos", albums = "Albums", favorites = "Favorites"
+    case photos = "Photos", favorites = "Favorites"
     var id: String { rawValue }
 }
 
@@ -138,8 +53,8 @@ private struct AccountTimeline: View {
     @State private var tab: AccountTab = .photos
     @State private var confirmSignOut = false
     @State private var confirmReset = false
-    @State private var showingAddAccount = false
     @State private var viewer: ViewerSelection?
+    @Environment(\.dismiss) private var dismiss
     @Namespace private var zoom
 
     var body: some View {
@@ -155,8 +70,6 @@ private struct AccountTimeline: View {
             switch tab {
             case .photos:
                 PhotosTimeline(viewModel: viewModel, zoom: zoom, open: openTimeline)
-            case .albums:
-                AlbumsGrid(viewModel: viewModel)
             case .favorites:
                 FavoritesGrid(viewModel: viewModel, zoom: zoom, viewer: $viewer)
             }
@@ -176,21 +89,12 @@ private struct AccountTimeline: View {
                 }
             }
         }
-        .sheet(isPresented: $showingAddAccount) {
-            NavigationStack {
-                SignInForm(viewModel: viewModel)
-                    .navigationTitle("Add Account")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingAddAccount = false } } }
-            }
-            .onChange(of: viewModel.activeID) { _, _ in showingAddAccount = false } // signing in switches to the new account
-        }
         .confirmationDialog("Sign out of \(viewModel.activeAccount?.email ?? "this account")?", isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button("Sign Out", role: .destructive) {
-                if let id = viewModel.activeID { Task { await viewModel.signOut(id) } }
+                if let id = viewModel.activeID { Task { await viewModel.signOut(id); dismiss() } }
             }
         } message: {
-            Text("The copy of your library on this device is deleted. Your photos on the server aren't touched.")
+            Text("The copy of your library on this device is deleted. Your photos on the server aren't touched. Albums from this account leave the Albums tab.")
         }
         .confirmationDialog("Download everything again?", isPresented: $confirmReset, titleVisibility: .visible) {
             Button("Download Again", role: .destructive) { Task { await viewModel.resetLocalData() } }
@@ -202,7 +106,7 @@ private struct AccountTimeline: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                accountSwitcher
+                accountLabel
                 Spacer()
                 if viewModel.isSyncing { ProgressView() }
             }
@@ -228,33 +132,11 @@ private struct AccountTimeline: View {
         return line
     }
 
-    /// Current account; tap to switch to another signed-in account or add one.
-    private var accountSwitcher: some View {
-        Menu {
-            ForEach(viewModel.accounts) { account in
-                Button {
-                    Task { await viewModel.switchAccount(to: account.id) }
-                } label: {
-                    if account.id == viewModel.activeID {
-                        Label("\(account.email) · \(account.host)", systemImage: "checkmark")
-                    } else {
-                        Text("\(account.email) · \(account.host)")
-                    }
-                }
-            }
-            Divider()
-            Button("Add Account…", systemImage: "plus") { showingAddAccount = true }
-        } label: {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(viewModel.activeAccount?.email ?? "").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
-                    Text(viewModel.activeAccount?.host ?? "").font(.caption).foregroundStyle(.secondary)
-                }
-                Image(systemName: "chevron.up.chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-            }
+    private var accountLabel: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(viewModel.activeAccount?.email ?? "").font(.subheadline.weight(.semibold))
+            Text(viewModel.activeAccount?.host ?? "").font(.caption).foregroundStyle(.secondary)
         }
-        .tint(.primary) // menu labels would otherwise take the accent colour
-        .accessibilityLabel("Account: \(viewModel.activeAccount?.email ?? ""). Switch account")
     }
 
     // MARK: Opening
@@ -348,58 +230,6 @@ private struct MonthGrid: View {
         // Reserve the right height before the rows load, so scrolling doesn't jump.
         .frame(minHeight: assets.isEmpty ? CGFloat((count + 2) / 3) * 130 : nil, alignment: .top)
         .task(id: viewModel.dataVersion) { assets = await viewModel.assets(inMonth: month) }
-    }
-}
-
-// MARK: - Albums
-
-private struct AlbumsGrid: View {
-    @ObservedObject var viewModel: ImmichAccountViewModel
-    private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-
-    var body: some View {
-        if viewModel.albums.isEmpty {
-            ContentUnavailableView("No Albums", systemImage: "rectangle.stack", description: Text("Albums you own or that are shared with you appear here."))
-        } else {
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(viewModel.albums) { album in
-                        if let account = viewModel.activeAccount {
-                            NavigationLink(value: AccountAlbum(account: account, album: album)) { card(album) }.buttonStyle(.plain)
-                        }
-                    }
-                }
-                .padding(16)
-            }
-            .refreshable { await viewModel.sync() }
-        }
-    }
-
-    private func card(_ album: LibraryAlbum) -> some View {
-        Color.clear
-            .aspectRatio(1, contentMode: .fit)
-            .overlay {
-                if let id = album.thumbnailAssetId {
-                    CachedAsyncImage(url: viewModel.thumbnailURL(id), headers: viewModel.imageHeaders, cacheScope: viewModel.imageCacheScope)
-                } else {
-                    Rectangle().fill(Color(.systemGray5)).overlay { Image(systemName: "photo.on.rectangle").foregroundStyle(.tertiary) }
-                }
-            }
-            .overlay(alignment: .bottomLeading) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(album.name).font(.subheadline.weight(.semibold)).lineLimit(2)
-                    Text("\(album.assetCount) item\(album.assetCount == 1 ? "" : "s")").font(.caption).opacity(0.85)
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
-                .padding(.top, 40)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom))
-            }
-            .clipShape(.rect(cornerRadius: 20))
-            .contentShape(.rect(cornerRadius: 20))
-            .accessibilityElement(children: .combine)
     }
 }
 
