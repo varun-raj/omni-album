@@ -24,6 +24,7 @@ struct AssetLightboxView: View {
 
     @State private var currentIndex: Int
     @State private var showDetailsSheet = false
+    @State private var isZoomed = false
     @State private var isSaving = false
     @State private var isSharing = false
     @State private var saveError: String?
@@ -71,6 +72,7 @@ struct AssetLightboxView: View {
                         PhotoPageView(
                             asset: asset,
                             viewModel: viewModel,
+                            isZoomed: $isZoomed,
                             onTap: { toggleChrome() }
                         )
                         .tag(index)
@@ -78,6 +80,8 @@ struct AssetLightboxView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .ignoresSafeArea()
+                .simultaneousGesture(swipeUpForDetails)
+                .onChange(of: currentIndex) { _, _ in isZoomed = false }
 
                 // Chrome floats over the photo: no title, just close / menu and the action bar
                 VStack(spacing: 0) {
@@ -127,6 +131,7 @@ struct AssetLightboxView: View {
         .sheet(isPresented: $showDetailsSheet) {
             if let asset = currentAsset {
                 AssetDetailsSheet(asset: asset, viewModel: viewModel)
+                    .presentationDetents([.medium, .large])
             }
         }
         .alert("Error", isPresented: .constant(saveError != nil)) {
@@ -277,6 +282,18 @@ struct AssetLightboxView: View {
             }
             .onAppear { proxy.scrollTo(currentIndex, anchor: .center) }
         }
+    }
+
+    /// Photos-style: flick up on the photo for its details. Ignored while zoomed (that's a pan) or when metadata is hidden.
+    private var swipeUpForDetails: some Gesture {
+        DragGesture(minimumDistance: 30)
+            .onEnded { value in
+                guard viewModel.showMetadata, !isZoomed else { return }
+                let up = -value.translation.height
+                guard up > 80, up > abs(value.translation.width) * 1.5 else { return }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                showDetailsSheet = true
+            }
     }
 
     private func toggleChrome() {
@@ -538,6 +555,7 @@ struct AssetLightboxView: View {
 private struct PhotoPageView: View {
     let asset: Asset
     let viewModel: AlbumDetailViewModel
+    @Binding var isZoomed: Bool
     let onTap: () -> Void
 
     var body: some View {
@@ -555,6 +573,7 @@ private struct PhotoPageView: View {
                 url: url,
                 viewModel: viewModel.requiresDecryption ? viewModel : nil,
                 asset: viewModel.requiresDecryption ? asset : nil,
+                isZoomed: $isZoomed,
                 onTap: onTap
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -948,6 +967,7 @@ struct ZoomablePhotoView: View {
     let url: URL?
     var viewModel: AlbumDetailViewModel? = nil
     var asset: Asset? = nil
+    var isZoomed: Binding<Bool>? = nil
     var onTap: (() -> Void)? = nil
 
     @State private var scale: CGFloat = 1
@@ -983,6 +1003,7 @@ struct ZoomablePhotoView: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .onChange(of: scale) { _, new in isZoomed?.wrappedValue = new > 1.05 }
         .task(id: asset?.id ?? url?.absoluteString ?? "") {
             await loadImage()
         }
