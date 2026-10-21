@@ -7,12 +7,23 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		34491903D3EC57282DE66B47 /* ServerBaseURLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA704F102A872B045EC3ACC /* ServerBaseURLTests.swift */; };
+		459F7E98604FAB2D61A909DD /* AlbumCSVTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49133CD7FE82DCCAF357A89F /* AlbumCSVTests.swift */; };
+		85406AA8108321EC12C17F87 /* LocalAlbumsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 717E3B99FB165C32E7F7DCF6 /* LocalAlbumsServiceTests.swift */; };
 		8B226ED72F34450800F07346 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 8B226E012F3341A500F07346 /* Kingfisher */; };
 		8B226F0E2F34560100F07346 /* UploadWidgetExtension.appex in Embed Extensions */ = {isa = PBXBuildFile; fileRef = 8B226F012F34560100F07346 /* UploadWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		8B226F222F34570000F07346 /* Sodium in Frameworks */ = {isa = PBXBuildFile; productRef = 8B226F212F34570000F07346 /* Sodium */; };
+		CF4E2356A44DAC00EE14EA35 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C3105B76F9FBA9CA958E1C2 /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		65FBA1A507E5A3F2EDC7B1A4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8B226DD72F3341A300F07346 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8B226DDE2F3341A300F07346;
+			remoteInfo = OmniAlbum;
+		};
 		8B226F0B2F34560100F07346 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 8B226DD72F3341A300F07346 /* Project object */;
@@ -37,8 +48,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1C3105B76F9FBA9CA958E1C2 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		49133CD7FE82DCCAF357A89F /* AlbumCSVTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AlbumCSVTests.swift; sourceTree = "<group>"; };
+		5EA704F102A872B045EC3ACC /* ServerBaseURLTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ServerBaseURLTests.swift; sourceTree = "<group>"; };
+		717E3B99FB165C32E7F7DCF6 /* LocalAlbumsServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalAlbumsServiceTests.swift; sourceTree = "<group>"; };
 		8B226DDF2F3341A300F07346 /* OmniAlbum.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OmniAlbum.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8B226F012F34560100F07346 /* UploadWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = UploadWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		92378904D164F43E98206B28 /* OmniAlbumTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OmniAlbumTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -78,6 +94,14 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		3225A09BDF50F98471A6CF3E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF4E2356A44DAC00EE14EA35 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		8B226DDC2F3341A300F07346 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -97,12 +121,30 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0037B94ECB748F91B004AF07 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				1C3105B76F9FBA9CA958E1C2 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		13F728D0B4A4DADE02835C4C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				0037B94ECB748F91B004AF07 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		8B226DD62F3341A300F07346 = {
 			isa = PBXGroup;
 			children = (
 				8B226DE12F3341A300F07346 /* OmniAlbum */,
 				8B226F062F34560100F07346 /* UploadWidgetExtension */,
 				8B226DE02F3341A300F07346 /* Products */,
+				13F728D0B4A4DADE02835C4C /* Frameworks */,
+				920EC5099866740CEFA39E1D /* OmniAlbumTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -111,13 +153,43 @@
 			children = (
 				8B226DDF2F3341A300F07346 /* OmniAlbum.app */,
 				8B226F012F34560100F07346 /* UploadWidgetExtension.appex */,
+				92378904D164F43E98206B28 /* OmniAlbumTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		920EC5099866740CEFA39E1D /* OmniAlbumTests */ = {
+			isa = PBXGroup;
+			children = (
+				49133CD7FE82DCCAF357A89F /* AlbumCSVTests.swift */,
+				717E3B99FB165C32E7F7DCF6 /* LocalAlbumsServiceTests.swift */,
+				5EA704F102A872B045EC3ACC /* ServerBaseURLTests.swift */,
+			);
+			name = OmniAlbumTests;
+			path = OmniAlbumTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		31B21636F2DFAAFD90B9A135 /* OmniAlbumTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E10F5648C802F4CBAB83472F /* Build configuration list for PBXNativeTarget "OmniAlbumTests" */;
+			buildPhases = (
+				3FE731910E80689F26540511 /* Sources */,
+				3225A09BDF50F98471A6CF3E /* Frameworks */,
+				4CB32C0CAE9D5124D740657D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				EF9D3C6E1071C3C6FC64257D /* PBXTargetDependency */,
+			);
+			name = OmniAlbumTests;
+			productName = OmniAlbumTests;
+			productReference = 92378904D164F43E98206B28 /* OmniAlbumTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		8B226DDE2F3341A300F07346 /* OmniAlbum */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 8B226DED2F3341A400F07346 /* Build configuration list for PBXNativeTarget "OmniAlbum" */;
@@ -202,11 +274,19 @@
 			targets = (
 				8B226DDE2F3341A300F07346 /* OmniAlbum */,
 				8B226F022F34560100F07346 /* UploadWidgetExtension */,
+				31B21636F2DFAAFD90B9A135 /* OmniAlbumTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		4CB32C0CAE9D5124D740657D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		8B226DDD2F3341A300F07346 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -224,6 +304,16 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		3FE731910E80689F26540511 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				459F7E98604FAB2D61A909DD /* AlbumCSVTests.swift in Sources */,
+				85406AA8108321EC12C17F87 /* LocalAlbumsServiceTests.swift in Sources */,
+				34491903D3EC57282DE66B47 /* ServerBaseURLTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		8B226DDB2F3341A300F07346 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -246,9 +336,33 @@
 			target = 8B226F022F34560100F07346 /* UploadWidgetExtension */;
 			targetProxy = 8B226F0B2F34560100F07346 /* PBXContainerItemProxy */;
 		};
+		EF9D3C6E1071C3C6FC64257D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = OmniAlbum;
+			target = 8B226DDE2F3341A300F07346 /* OmniAlbum */;
+			targetProxy = 65FBA1A507E5A3F2EDC7B1A4 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		09F8F2CE6661EBCF2E795EDC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 8HQA2YC4EH;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				PRODUCT_BUNDLE_IDENTIFIER = com.skcript.omnialbum.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/OmniAlbum.app/OmniAlbum";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		8B226DEE2F3341A400F07346 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -512,6 +626,23 @@
 			};
 			name = Release;
 		};
+		EC5BC79C98F83A33715DFA74 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 8HQA2YC4EH;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				PRODUCT_BUNDLE_IDENTIFIER = com.skcript.omnialbum.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/OmniAlbum.app/OmniAlbum";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -538,6 +669,15 @@
 			buildConfigurations = (
 				8B226F082F34560100F07346 /* Debug */,
 				8B226F092F34560100F07346 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E10F5648C802F4CBAB83472F /* Build configuration list for PBXNativeTarget "OmniAlbumTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				09F8F2CE6661EBCF2E795EDC /* Release */,
+				EC5BC79C98F83A33715DFA74 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

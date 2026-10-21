@@ -100,11 +100,12 @@ struct StoredAlbum: Codable, Identifiable {
 
 /// Local storage service using JSON file in documents directory
 final class LocalAlbumsService {
-    private let fileName = "albums.json"
+    private let fileURL: URL
 
-    private var fileURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(fileName)
+    /// `fileURL` is injectable so tests don't touch the real album list.
+    init(fileURL: URL? = nil) {
+        self.fileURL = fileURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("albums.json")
     }
 
     /// Load albums from local JSON file
