@@ -60,6 +60,28 @@ struct DisplayAlbum: Identifiable, Hashable, Sendable {
     static func == (lhs: DisplayAlbum, rhs: DisplayAlbum) -> Bool { lhs.id == rhs.id }
 }
 
+extension DisplayAlbum {
+    /// The share URL a user would paste, rebuilt from the stored base URL, key and provider.
+    var shareLink: String {
+        switch provider {
+        case .immich:
+            return "\(baseURL)/share/\(shareKey)"
+        case .nextcloud:
+            return "\(baseURL)/apps/photos/public/\(shareKey)"
+        case .photoprism:
+            // shareKey is composite: "linkToken|previewToken|downloadToken|albumUID"
+            return "\(baseURL)/s/\(shareKey.components(separatedBy: "|").first ?? shareKey)"
+        case .lychee:
+            return "\(baseURL)/gallery/\(shareKey)"
+        case .ente:
+            // shareKey is composite: "accessToken|base58Key"
+            let parts = shareKey.components(separatedBy: "|")
+            if parts.count >= 2 { return "https://albums.ente.io?t=\(parts[0])#\(parts[1])" }
+            return "\(baseURL)/\(shareKey)"
+        }
+    }
+}
+
 @MainActor
 final class AggregatorViewModel: ObservableObject {
     @Published private(set) var albums: [DisplayAlbum] = []
@@ -82,10 +104,10 @@ final class AggregatorViewModel: ObservableObject {
         NotificationCenter.default.publisher(for: .albumDataUpdated)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] notification in
-                if let albumId = notification.userInfo?["albumId"] as? String,
+                if let linkId = notification.userInfo?["linkId"] as? String,
                    let assetCount = notification.userInfo?["assetCount"] as? Int,
                    let thumbnailId = notification.userInfo?["thumbnailId"] as? String? {
-                    self?.updateAlbumData(albumId: albumId, assetCount: assetCount, thumbnailId: thumbnailId)
+                    self?.updateAlbumData(linkId: linkId, assetCount: assetCount, thumbnailId: thumbnailId)
                 }
             }
             .store(in: &cancellables)
@@ -119,8 +141,8 @@ final class AggregatorViewModel: ObservableObject {
     }
 
     /// Update album data from detail view
-    func updateAlbumData(albumId: String, assetCount: Int, thumbnailId: String?) {
-        guard let index = albums.firstIndex(where: { $0.albumId == albumId }) else { return }
+    func updateAlbumData(linkId: String, assetCount: Int, thumbnailId: String?) {
+        guard let index = albums.firstIndex(where: { $0.id == linkId }) else { return }
 
         let oldAlbum = albums[index]
         let updatedAlbum = DisplayAlbum(
@@ -252,7 +274,7 @@ final class AggregatorViewModel: ObservableObject {
                 return
             }
 
-            PasswordStore.set(password, for: display.albumId)
+            PasswordStore.set(password, baseURL: display.baseURL, shareKey: display.shareKey)
 
             // Save to local first (instant)
             localService.addAlbum(display)

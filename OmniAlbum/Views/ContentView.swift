@@ -17,6 +17,7 @@ struct ContentView: View {
     @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
     @State private var navigationPath = NavigationPath()
     @State private var showAddSheet = false
+    @State private var albumToDelete: DisplayAlbum?
     @State private var searchText = ""
     @AppStorage("albumViewMode") private var viewMode: AlbumViewMode = .grid
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -86,20 +87,34 @@ struct ContentView: View {
                 }
             }
         }
-        .onChange(of: deepLinkRouter.pendingTarget?.albumId) { _, albumId in
-            guard let albumId else { return }
-            handleDeepLink(albumId: albumId)
+        .confirmationDialog(
+            "Delete \"\(albumToDelete?.albumName ?? "")\"?",
+            isPresented: Binding(get: { albumToDelete != nil }, set: { if !$0 { albumToDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: albumToDelete
+        ) { album in
+            Button("Delete Album", role: .destructive) {
+                Task { await viewModel.deleteAlbum(album) }
+            }
+        } message: { _ in
+            Text("This removes the album from OmniAlbum. The photos on the server aren't affected.")
         }
+        // A link can arrive before the list has loaded: try again when either side changes.
+        .onChange(of: deepLinkRouter.pendingTarget?.albumId) { _, _ in openPendingDeepLink() }
+        .onChange(of: viewModel.albums.map(\.id)) { _, _ in openPendingDeepLink() }
+        .onChange(of: viewModel.isLoading) { _, _ in openPendingDeepLink() }
+        .onChange(of: viewModel.isSyncing) { _, _ in openPendingDeepLink() }
+        .onAppear { openPendingDeepLink() }
     }
 
-    private func handleDeepLink(albumId: String) {
-        // Find the matching album from loaded data
-        if let album = viewModel.albums.first(where: { $0.albumId == albumId }) {
-            // Reset navigation stack and push to the album
-            navigationPath = NavigationPath()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                navigationPath.append(album)
-            }
+    /// Pushes the album named by a pending deep link. The target stays pending until the album exists
+    /// (AlbumDetailView consumes it); if the lists have finished loading and it never shows up, it's dropped.
+    private func openPendingDeepLink() {
+        guard let target = deepLinkRouter.pendingTarget else { return }
+        if let album = viewModel.albums.first(where: { $0.albumId == target.albumId }) {
+            navigationPath = NavigationPath([album])
+        } else if !viewModel.isLoading && !viewModel.isSyncing {
+            _ = deepLinkRouter.consumeTarget()
         }
     }
 
@@ -208,6 +223,18 @@ struct ContentView: View {
                             AlbumGridCell(album: album, cornerRadius: Self.albumCornerRadius)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Copy Link", systemImage: "doc.on.doc") {
+                                UIPasteboard.general.string = album.shareLink
+                            }
+                            ShareLink(item: album.shareLink) {
+                                Label("Share Link", systemImage: "square.and.arrow.up")
+                            }
+                            Divider()
+                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                albumToDelete = album
+                            }
+                        }
                     }
                 }
                 .padding(Self.gridPadding)
@@ -232,12 +259,7 @@ struct ContentView: View {
                     }
                 }
                 .onDelete { indexSet in
-                    Task {
-                        for index in indexSet {
-                            let album = filteredAlbums[index]
-                            await viewModel.deleteAlbum(album)
-                        }
-                    }
+                    albumToDelete = indexSet.first.map { filteredAlbums[$0] }
                 }
             }
         }

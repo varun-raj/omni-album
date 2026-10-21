@@ -12,6 +12,9 @@ import Kingfisher
 
 struct CachedAsyncImage: View {
     let url: URL?
+    /// Longest side, in pixels, the image is decoded at. Tiles are ~400 px; decoding thumbnails at full size
+    /// piles up memory in long albums.
+    var maxPixel: CGFloat = 512
 
     var body: some View {
         ZStack {
@@ -20,6 +23,9 @@ struct CachedAsyncImage: View {
 
             if let url = url {
                 KFImage(url)
+                    .setProcessor(DownsamplingImageProcessor(size: CGSize(width: maxPixel, height: maxPixel)))
+                    .scaleFactor(1) // size above is already pixels
+                    .cacheOriginalImage()
                     .placeholder {
                         Color(.systemGray5)
                     }

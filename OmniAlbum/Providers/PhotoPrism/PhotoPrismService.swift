@@ -159,15 +159,7 @@ final class PhotoPrismService {
 
     /// Normalize a base URL to scheme://host[:port]
     func normalizeBaseURL(_ raw: String) -> String? {
-        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !s.hasPrefix("http") { s = "https://" + s }
-        guard let url = URL(string: s), let host = url.host else { return nil }
-        let scheme = url.scheme ?? "https"
-        var base = "\(scheme)://\(host)"
-        if let port = url.port, (scheme == "https" && port != 443) || (scheme == "http" && port != 80) {
-            base += ":\(port)"
-        }
-        return base
+        ServerBaseURL.normalize(raw)
     }
 
     // MARK: - Share Link Resolution

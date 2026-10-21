@@ -69,7 +69,7 @@ struct StoredAlbum: Codable, Identifiable {
             allowUpload: allowUpload,
             allowDownload: allowDownload,
             showMetadata: showMetadata,
-            password: password ?? PasswordStore.get(albumId),
+            password: password ?? PasswordStore.get(baseURL: baseURL, shareKey: shareKey, legacyAlbumId: albumId),
             provider: PhotoProvider(rawValue: provider) ?? .immich
         )
     }
@@ -160,7 +160,7 @@ final class LocalAlbumsService {
     /// Delete an album from local storage
     func deleteAlbum(id: String) {
         var albums = loadStoredAlbums()
-        if let removed = albums.first(where: { $0.id == id }) { PasswordStore.set(nil, for: removed.albumId) }
+        if let removed = albums.first(where: { $0.id == id }) { PasswordStore.set(nil, baseURL: removed.baseURL, shareKey: removed.shareKey) }
         albums.removeAll { $0.id == id }
         saveStoredAlbums(albums)
     }
@@ -173,7 +173,7 @@ final class LocalAlbumsService {
         let localDates = Dictionary(localAlbums.map { ($0.id, $0.createdAt) }, uniquingKeysWith: { first, _ in first })
 
         // Use CloudKit albums as source of truth, but preserve local creation dates
-        for album in cloudKitAlbums where album.password != nil { PasswordStore.set(album.password, for: album.albumId) }
+        for album in cloudKitAlbums where album.password != nil { PasswordStore.set(album.password, baseURL: album.baseURL, shareKey: album.shareKey) }
         let cloudIds = Set(cloudKitAlbums.map(\.id))
         let merged = cloudKitAlbums.map { album in
             StoredAlbum(
@@ -197,7 +197,7 @@ final class LocalAlbumsService {
     private func migratePasswords(_ stored: [StoredAlbum]) {
         let legacy = stored.filter { $0.password != nil }
         guard !legacy.isEmpty else { return }
-        for album in legacy { PasswordStore.set(album.password, for: album.albumId) }
+        for album in legacy { PasswordStore.set(album.password, baseURL: album.baseURL, shareKey: album.shareKey) }
         saveStoredAlbums(stored)
     }
 

@@ -78,7 +78,7 @@ struct UploadTask: Codable, Identifiable, Equatable {
         albumName = try container.decode(String.self, forKey: .albumName)
         baseURL = try container.decode(String.self, forKey: .baseURL)
         shareKey = try container.decode(String.self, forKey: .shareKey)
-        password = try container.decodeIfPresent(String.self, forKey: .password) ?? PasswordStore.get(albumId)
+        password = try container.decodeIfPresent(String.self, forKey: .password) ?? PasswordStore.get(baseURL: baseURL, shareKey: shareKey, legacyAlbumId: albumId)
         localAssetIdentifier = try container.decode(String.self, forKey: .localAssetIdentifier)
         fileName = try container.decode(String.self, forKey: .fileName)
         fileSize = try container.decodeIfPresent(Int64.self, forKey: .fileSize)

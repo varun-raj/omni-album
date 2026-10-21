@@ -85,7 +85,7 @@ final class AlbumDetailViewModel: ObservableObject {
 
     /// The share link URL for this album
     var shareURL: String {
-        "\(album.baseURL)/share/\(album.shareKey)"
+        album.shareLink
     }
 
     /// Owner name from the album details
@@ -174,7 +174,7 @@ final class AlbumDetailViewModel: ObservableObject {
                 name: .albumDataUpdated,
                 object: nil,
                 userInfo: [
-                    "albumId": album.albumId,
+                    "linkId": album.id,
                     "assetCount": detail.assetCount,
                     "thumbnailId": detail.thumbnailAssetId as Any
                 ]

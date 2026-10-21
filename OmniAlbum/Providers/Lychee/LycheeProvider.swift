@@ -49,13 +49,7 @@ struct LycheeProvider: ShareLinkProvider {
             throw LycheeServiceError.albumNotFound
         }
 
-        // Build base URL (scheme://host:port)
-        let scheme = url.scheme ?? "https"
-        var base = "\(scheme)://\(host)"
-        if let port = url.port,
-           (scheme == "https" && port != 443) || (scheme == "http" && port != 80) {
-            base += ":\(port)"
-        }
+        let base = ServerBaseURL.make(url, prefixBefore: "/gallery/") ?? ""
 
         return ParsedShareLinkResult(
             baseURL: base,

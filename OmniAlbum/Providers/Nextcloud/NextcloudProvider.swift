@@ -56,12 +56,7 @@ final class NextcloudProvider: ShareLinkProvider, @unchecked Sendable {
             throw NextcloudShareLinkError.missingPhotosPath
         }
 
-        // Extract base URL
-        let scheme = url.scheme ?? "https"
-        var base = "\(scheme)://\(host)"
-        if let port = url.port, (scheme == "https" && port != 443) || (scheme == "http" && port != 80) {
-            base += ":\(port)"
-        }
+        let base = ServerBaseURL.make(url, prefixBefore: "/apps/photos/public/") ?? ""
 
         // Extract token: last path component after /apps/photos/public/
         let pathParts = path.split(separator: "/")
@@ -196,7 +191,7 @@ final class NextcloudProvider: ShareLinkProvider, @unchecked Sendable {
     func thumbnailURL(baseURL: String, assetId: String, shareKey: String) -> URL? {
         // /apps/photos/api/v1/publicPreview/{fileId}?x=256&y=256&token={TOKEN}
         var comp = URLComponents(string: baseURL)
-        comp?.path = "/apps/photos/api/v1/publicPreview/\(assetId)"
+        comp?.path += "/apps/photos/api/v1/publicPreview/\(assetId)"
         comp?.queryItems = [
             URLQueryItem(name: "x", value: "256"),
             URLQueryItem(name: "y", value: "256"),
@@ -208,7 +203,7 @@ final class NextcloudProvider: ShareLinkProvider, @unchecked Sendable {
     func previewURL(baseURL: String, asset: Asset, shareKey: String) -> URL? {
         // /apps/photos/api/v1/publicPreview/{fileId}?x=2048&y=2048&token={TOKEN}
         var comp = URLComponents(string: baseURL)
-        comp?.path = "/apps/photos/api/v1/publicPreview/\(asset.id)"
+        comp?.path += "/apps/photos/api/v1/publicPreview/\(asset.id)"
         comp?.queryItems = [
             URLQueryItem(name: "x", value: "2048"),
             URLQueryItem(name: "y", value: "2048"),
@@ -231,6 +226,7 @@ final class NextcloudProvider: ShareLinkProvider, @unchecked Sendable {
         if let port = baseComp.port {
             authBase += ":\(port)"
         }
+        authBase += baseComp.path // install prefix, e.g. /nextcloud
         return URL(string: "\(authBase)/remote.php/dav/photospublic/\(shareKey)/\(encodedName)")
     }
 

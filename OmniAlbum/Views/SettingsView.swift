@@ -182,7 +182,7 @@ struct SettingsView: View {
 
         for album in albums {
             let escapedName = album.albumName.replacingOccurrences(of: "\"", with: "\"\"")
-            let shareLink = reconstructShareURL(for: album)
+            let shareLink = album.shareLink
             let escapedLink = shareLink.replacingOccurrences(of: "\"", with: "\"\"")
             let row = "\"\(escapedName)\",\"\(escapedLink)\",\(album.assetCount ?? 0),\(album.allowUpload),\(album.allowDownload),\(album.provider.rawValue)\n"
             csvContent.append(row)
@@ -199,29 +199,6 @@ struct SettingsView: View {
         } catch {
             importError = "Failed to create export file: \(error.localizedDescription)"
             showingImportError = true
-        }
-    }
-
-    /// Reconstruct the original share URL from stored baseURL, shareKey, and provider
-    private func reconstructShareURL(for album: DisplayAlbum) -> String {
-        switch album.provider {
-        case .immich:
-            return "\(album.baseURL)/share/\(album.shareKey)"
-        case .nextcloud:
-            return "\(album.baseURL)/apps/photos/public/\(album.shareKey)"
-        case .photoprism:
-            // shareKey is composite: "linkToken|previewToken|downloadToken|albumUID"
-            let linkToken = album.shareKey.components(separatedBy: "|").first ?? album.shareKey
-            return "\(album.baseURL)/s/\(linkToken)"
-        case .lychee:
-            return "\(album.baseURL)/gallery/\(album.shareKey)"
-        case .ente:
-            // shareKey is composite: "accessToken|base58Key"
-            let parts = album.shareKey.components(separatedBy: "|")
-            if parts.count >= 2 {
-                return "https://albums.ente.io?t=\(parts[0])#\(parts[1])"
-            }
-            return "\(album.baseURL)/\(album.shareKey)"
         }
     }
 

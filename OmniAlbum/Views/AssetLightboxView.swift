@@ -69,12 +69,20 @@ struct AssetLightboxView: View {
                 // Photo pager, edge to edge
                 TabView(selection: $currentIndex) {
                     ForEach(Array(assets.enumerated()), id: \.element.id) { index, asset in
-                        PhotoPageView(
-                            asset: asset,
-                            viewModel: viewModel,
-                            isZoomed: $isZoomed,
-                            onTap: { toggleChrome() }
-                        )
+                        // Pages far from the current one stay empty: a TabView otherwise builds every
+                        // page (image loads, players) up front, which hurts in albums with thousands of photos.
+                        Group {
+                            if abs(index - currentIndex) <= 2 {
+                                PhotoPageView(
+                                    asset: asset,
+                                    viewModel: viewModel,
+                                    isZoomed: $isZoomed,
+                                    onTap: { toggleChrome() }
+                                )
+                            } else {
+                                Color.clear
+                            }
+                        }
                         .tag(index)
                     }
                 }
@@ -734,6 +742,9 @@ private struct ThumbnailCell: View {
             Group {
                 if let url = url {
                     KFImage(url)
+                        .setProcessor(DownsamplingImageProcessor(size: CGSize(width: 160, height: 160)))
+                        .scaleFactor(1)
+                        .cacheOriginalImage()
                         .placeholder {
                             Color(.systemGray4)
                         }
@@ -976,6 +987,7 @@ struct ZoomablePhotoView: View {
     @State private var lastOffset: CGSize = .zero
     @State private var loadedImage: UIImage?
     @State private var isLoading = true
+    @State private var loadFailed = false
 
     private let minScale: CGFloat = 1
     private let maxScale: CGFloat = 5
@@ -997,6 +1009,8 @@ struct ZoomablePhotoView: View {
                 } else if isLoading {
                     ProgressView()
                         .scaleEffect(1.2)
+                } else if loadFailed {
+                    failedView
                 } else {
                     placeholderView
                 }
@@ -1011,6 +1025,7 @@ struct ZoomablePhotoView: View {
 
     private func loadImage() async {
         loadedImage = nil
+        loadFailed = false
         isLoading = true
 
         // Try decrypted data path first (for Ente and similar providers)
@@ -1024,12 +1039,18 @@ struct ZoomablePhotoView: View {
                     return
                 }
             } catch {
-                // Fall through to URL-based loading
+                // The URL for an encrypted asset can't be decoded either: show the failure, don't fall through.
+                await MainActor.run {
+                    loadFailed = true
+                    isLoading = false
+                }
+                return
             }
         }
 
         guard let url = url else {
             isLoading = false
+            loadFailed = true
             return
         }
 
@@ -1046,6 +1067,7 @@ struct ZoomablePhotoView: View {
                 loadedImage = value.image
             case .failure:
                 loadedImage = nil
+                loadFailed = true
             }
             isLoading = false
         }
@@ -1092,6 +1114,21 @@ struct ZoomablePhotoView: View {
             } else {
                 scale = 2.5
             }
+        }
+    }
+
+    private var failedView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 36))
+                .foregroundStyle(.secondary)
+            Text("Couldn't load this photo")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button("Try Again") {
+                Task { await loadImage() }
+            }
+            .buttonStyle(.bordered)
         }
     }
 

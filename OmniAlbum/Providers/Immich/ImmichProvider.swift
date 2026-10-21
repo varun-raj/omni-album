@@ -75,14 +75,14 @@ final class ImmichProvider: ShareLinkProvider, @unchecked Sendable {
 
     func thumbnailURL(baseURL: String, assetId: String, shareKey: String) -> URL? {
         var comp = URLComponents(string: baseURL)
-        comp?.path = "/api/assets/\(assetId)/thumbnail"
+        comp?.path += "/api/assets/\(assetId)/thumbnail"
         comp?.queryItems = [URLQueryItem(name: "key", value: shareKey)]
         return comp?.url
     }
 
     func previewURL(baseURL: String, asset: Asset, shareKey: String) -> URL? {
         var comp = URLComponents(string: baseURL)
-        comp?.path = "/api/assets/\(asset.id)/thumbnail"
+        comp?.path += "/api/assets/\(asset.id)/thumbnail"
         comp?.queryItems = [
             URLQueryItem(name: "key", value: shareKey),
             URLQueryItem(name: "size", value: "preview"),
@@ -93,7 +93,7 @@ final class ImmichProvider: ShareLinkProvider, @unchecked Sendable {
 
     func originalURL(baseURL: String, asset: Asset, shareKey: String) -> URL? {
         var comp = URLComponents(string: baseURL)
-        comp?.path = "/api/assets/\(asset.id)/original"
+        comp?.path += "/api/assets/\(asset.id)/original"
         comp?.queryItems = [URLQueryItem(name: "key", value: shareKey)]
         return comp?.url
     }
@@ -101,7 +101,7 @@ final class ImmichProvider: ShareLinkProvider, @unchecked Sendable {
     func videoPlaybackURL(baseURL: String, asset: Asset, shareKey: String) -> URL? {
         guard asset.type == .video else { return nil }
         var comp = URLComponents(string: baseURL)
-        comp?.path = "/api/assets/\(asset.id)/video/playback"
+        comp?.path += "/api/assets/\(asset.id)/video/playback"
         var queryItems = [URLQueryItem(name: "key", value: shareKey)]
         if let checksum = asset.providerData?["checksum"] {
             queryItems.append(URLQueryItem(name: "c", value: checksum))

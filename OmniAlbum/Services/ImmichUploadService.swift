@@ -150,7 +150,7 @@ final class ImmichUploadService {
         password: String?
     ) async throws {
         var components = URLComponents(string: baseURL)!
-        components.path = "/api/albums/\(albumId)/assets"
+        components.path += "/api/albums/\(albumId)/assets"
         var queryItems = [URLQueryItem(name: "key", value: shareKey)]
         if let password = password, !password.isEmpty {
             queryItems.append(URLQueryItem(name: "password", value: password))
@@ -181,7 +181,7 @@ final class ImmichUploadService {
 
     private func buildUploadURL(baseURL: String, shareKey: String, password: String?) -> URL {
         var components = URLComponents(string: baseURL)!
-        components.path = "/api/assets"
+        components.path += "/api/assets"
         var queryItems = [URLQueryItem(name: "key", value: shareKey)]
         if let password = password, !password.isEmpty {
             queryItems.append(URLQueryItem(name: "password", value: password))

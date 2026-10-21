@@ -42,11 +42,7 @@ enum ImmichShareLink {
         guard path.contains("/share/") else {
             throw ShareLinkParseError.missingSharePath
         }
-        let scheme = url.scheme ?? "https"
-        var base = "\(scheme)://\(host)"
-        if let port = url.port, (scheme == "https" && port != 443) || (scheme == "http" && port != 80) {
-            base += ":\(port)"
-        }
+        let base = ServerBaseURL.make(url, prefixBefore: "/share/") ?? ""
         let pathParts = path.split(separator: "/")
         guard let shareIndex = pathParts.firstIndex(of: "share"), shareIndex + 1 < pathParts.count else {
             throw ShareLinkParseError.missingKeyOrToken

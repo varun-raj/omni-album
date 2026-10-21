@@ -99,12 +99,7 @@ final class PhotoPrismProvider: ShareLinkProvider, @unchecked Sendable {
             ? String(pathComponents[sIndex + 2])
             : nil
 
-        // Build base URL
-        let scheme = url.scheme ?? "https"
-        var base = "\(scheme)://\(host)"
-        if let port = url.port, (scheme == "https" && port != 443) || (scheme == "http" && port != 80) {
-            base += ":\(port)"
-        }
+        let base = ServerBaseURL.make(url, prefixBefore: "/s/") ?? ""
 
         return ParsedShareLinkResult(
             baseURL: base,
