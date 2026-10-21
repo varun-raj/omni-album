@@ -51,15 +51,16 @@ actor LibraryStore {
         try Self.migrate(db)
     }
 
-    /// Database file for a server, outside Documents and excluded from backup (it can be rebuilt by syncing).
-    static func defaultPath(for server: String) throws -> String {
+    /// Database file for one account (`ImmichAccountInfo.id`), outside Documents and excluded from backup
+    /// (it can be rebuilt by syncing).
+    static func defaultPath(for accountID: String) throws -> String {
         var dir = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("ImmichLibrary", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         try? dir.setResourceValues(values)
-        let name = server.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? String($0) : "_" }.joined()
+        let name = accountID.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? String($0) : "_" }.joined()
         return dir.appendingPathComponent("\(name).sqlite").path
     }
 

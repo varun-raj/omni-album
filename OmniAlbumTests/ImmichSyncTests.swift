@@ -235,3 +235,74 @@ final class ImmichSyncEngineTests: XCTestCase {
         XCTAssertEqual(auth, "Bearer tok")
     }
 }
+
+// MARK: - Accounts
+
+final class ImmichAccountSessionTests: XCTestCase {
+    private var defaults: UserDefaults!
+    private var session: ImmichAccountSession!
+    private let server = "https://acct-\(UUID().uuidString.prefix(8).lowercased()).example"
+
+    override func setUp() {
+        defaults = UserDefaults(suiteName: "test-\(UUID().uuidString)")
+        session = ImmichAccountSession(defaults: defaults)
+    }
+
+    override func tearDown() {
+        session.accounts.forEach { session.remove($0.id) } // clears the Keychain tokens too
+    }
+
+    private func creds(_ user: String, server: String? = nil, token: String? = nil) -> ImmichCredentials {
+        ImmichCredentials(server: server ?? self.server, email: "\(user)@x", userId: user, token: token ?? "token-\(user)")
+    }
+
+    func testAddActivatesAndStoresTheToken() {
+        session.add(creds("u1"))
+        XCTAssertEqual(session.activeID, creds("u1").id)
+        XCTAssertEqual(session.activeCredentials?.token, "token-u1")
+    }
+
+    func testTwoUsersOnOneServerKeepSeparateTokensAndLibraries() throws {
+        session.add(creds("u1"))
+        session.add(creds("u2"))
+        XCTAssertEqual(session.accounts.count, 2)
+        XCTAssertEqual(session.credentials(for: creds("u1").id)?.token, "token-u1")
+        XCTAssertEqual(session.credentials(for: creds("u2").id)?.token, "token-u2")
+        XCTAssertNotEqual(try LibraryStore.defaultPath(for: creds("u1").id), try LibraryStore.defaultPath(for: creds("u2").id))
+    }
+
+    func testSwitching() {
+        session.add(creds("u1"))
+        session.add(creds("u2"))
+        XCTAssertEqual(session.activeID, creds("u2").id) // newest is active
+        session.setActive(creds("u1").id)
+        XCTAssertEqual(session.activeCredentials?.userId, "u1")
+        session.setActive("not-an-account") // ignored
+        XCTAssertEqual(session.activeCredentials?.userId, "u1")
+    }
+
+    func testRemovingTheActiveAccountFallsBackToAnother() {
+        session.add(creds("u1"))
+        session.add(creds("u2"))
+        session.remove(creds("u2").id)
+        XCTAssertEqual(session.accounts.map(\.userId), ["u1"])
+        XCTAssertEqual(session.activeCredentials?.userId, "u1")
+        XCTAssertNil(session.credentials(for: creds("u2").id), "token must be gone")
+        session.remove(creds("u1").id)
+        XCTAssertNil(session.activeID)
+        XCTAssertNil(session.activeCredentials)
+    }
+
+    func testSigningInAgainReplacesTheTokenWithoutDuplicating() {
+        session.add(creds("u1", token: "old"))
+        session.add(creds("u1", token: "new"))
+        XCTAssertEqual(session.accounts.count, 1)
+        XCTAssertEqual(session.activeCredentials?.token, "new")
+    }
+
+    func testSurvivesRelaunch() {
+        session.add(creds("u1"))
+        let relaunched = ImmichAccountSession(defaults: defaults)
+        XCTAssertEqual(relaunched.activeCredentials?.userId, "u1")
+    }
+}

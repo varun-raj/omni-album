@@ -15,6 +15,10 @@ struct CachedAsyncImage: View {
     /// Longest side, in pixels, the image is decoded at. Tiles are ~400 px; decoding thumbnails at full size
     /// piles up memory in long albums.
     var maxPixel: CGFloat = 512
+    /// Extra request headers (an account's bearer token), applied to this view's loads only.
+    var headers: [String: String]? = nil
+    /// Namespaces the cache entry (e.g. per account), so two users on one server never share a cached image.
+    var cacheScope: String? = nil
 
     var body: some View {
         ZStack {
@@ -22,7 +26,13 @@ struct CachedAsyncImage: View {
             Color(.systemGray5)
 
             if let url = url {
-                KFImage(url)
+                KFImage(source: .network(Self.resource(for: url, scope: cacheScope)))
+                    .requestModifier(AnyModifier { [headers] request in
+                        guard let headers else { return request }
+                        var r = request
+                        headers.forEach { r.setValue($1, forHTTPHeaderField: $0) }
+                        return r
+                    })
                     .setProcessor(DownsamplingImageProcessor(size: CGSize(width: maxPixel, height: maxPixel)))
                     .scaleFactor(1) // size above is already pixels
                     .cacheOriginalImage()
@@ -39,6 +49,13 @@ struct CachedAsyncImage: View {
             }
         }
         .clipped()
+    }
+}
+
+extension CachedAsyncImage {
+    fileprivate static func resource(for url: URL, scope: String?) -> Kingfisher.Resource {
+        guard let scope else { return KF.ImageResource(downloadURL: url) }
+        return KF.ImageResource(downloadURL: url, cacheKey: "\(scope)|\(url.absoluteString)")
     }
 }
 
@@ -75,9 +92,6 @@ enum ImageCacheConfig {
     static let cacheExpirationDays = 30
 
     static func configure() {
-        // Account images carry the bearer token (account server only)
-        KingfisherManager.shared.defaultOptions = [.requestModifier(ImmichAccountSession.requestModifier)]
-
         // Configure memory cache
         ImageCache.default.memoryStorage.config.totalCostLimit = Int(memoryCacheLimit)
         ImageCache.default.memoryStorage.config.countLimit = memoryCacheCountLimit

@@ -89,7 +89,11 @@ struct ImmichAccountClient: Sendable {
         }
     }
 
-    // MARK: Image URLs (authorized by ImmichAccountSession's Kingfisher modifier)
+    // MARK: Image URLs (loaded with `authHeaders`, namespaced by `cacheScope`)
+
+    var authHeaders: [String: String] { ["Authorization": "Bearer \(credentials.token)"] }
+    /// Cache namespace: one account's images never come out of another's cache entries.
+    var cacheScope: String { credentials.id }
 
     func thumbnailURL(assetId: String) -> URL? {
         URL(string: "\(credentials.server)/api/assets/\(assetId)/thumbnail?size=thumbnail")

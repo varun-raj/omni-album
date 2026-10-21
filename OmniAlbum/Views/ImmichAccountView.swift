@@ -12,7 +12,7 @@ struct ImmichAccountView: View {
 
     var body: some View {
         Group {
-            if viewModel.credentials == nil {
+            if viewModel.activeAccount == nil {
                 SignInForm(viewModel: viewModel)
             } else {
                 AccountTimeline(viewModel: viewModel)
@@ -110,6 +110,7 @@ private struct AccountTimeline: View {
     @ObservedObject var viewModel: ImmichAccountViewModel
     @State private var confirmSignOut = false
     @State private var confirmReset = false
+    @State private var showingAddAccount = false
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
 
@@ -140,14 +141,25 @@ private struct AccountTimeline: View {
                     Button("Sync Now", systemImage: "arrow.triangle.2.circlepath") { Task { await viewModel.sync() } }
                     Button("Download Everything Again", systemImage: "arrow.counterclockwise") { confirmReset = true }
                     Divider()
-                    Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { confirmSignOut = true }
+                    Button("Sign Out of This Account", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { confirmSignOut = true }
                 } label: {
                     Image(systemName: "ellipsis")
                 }
             }
         }
-        .confirmationDialog("Sign out?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-            Button("Sign Out", role: .destructive) { viewModel.signOut() }
+        .sheet(isPresented: $showingAddAccount) {
+            NavigationStack {
+                SignInForm(viewModel: viewModel)
+                    .navigationTitle("Add Account")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingAddAccount = false } } }
+            }
+            .onChange(of: viewModel.activeID) { _, _ in showingAddAccount = false } // signing in switches to the new account
+        }
+        .confirmationDialog("Sign out of \(viewModel.activeAccount?.email ?? "this account")?", isPresented: $confirmSignOut, titleVisibility: .visible) {
+            Button("Sign Out", role: .destructive) {
+                if let id = viewModel.activeID { Task { await viewModel.signOut(id) } }
+            }
         } message: {
             Text("The copy of your library on this device is deleted. Your photos on the server aren't touched.")
         }
@@ -159,11 +171,7 @@ private struct AccountTimeline: View {
     private var statusCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(viewModel.credentials?.email ?? "").font(.subheadline.weight(.semibold))
-                    Text(viewModel.credentials.flatMap { URL(string: $0.server)?.host } ?? "")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                accountSwitcher
                 Spacer()
                 if viewModel.isSyncing { ProgressView() }
             }
@@ -189,6 +197,34 @@ private struct AccountTimeline: View {
         .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 20))
     }
 
+    /// Current account; tap to switch to another signed-in account or add one.
+    private var accountSwitcher: some View {
+        Menu {
+            ForEach(viewModel.accounts) { account in
+                Button {
+                    Task { await viewModel.switchAccount(to: account.id) }
+                } label: {
+                    if account.id == viewModel.activeID {
+                        Label("\(account.email) · \(account.host)", systemImage: "checkmark")
+                    } else {
+                        Text("\(account.email) · \(account.host)")
+                    }
+                }
+            }
+            Divider()
+            Button("Add Account…", systemImage: "plus") { showingAddAccount = true }
+        } label: {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(viewModel.activeAccount?.email ?? "").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                    Text(viewModel.activeAccount?.host ?? "").font(.caption).foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.up.chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityLabel("Account: \(viewModel.activeAccount?.email ?? ""). Switch account")
+    }
+
     private func monthTitle(_ month: String) -> String {
         let parts = month.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 2, let date = Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1])) else { return month }
@@ -209,7 +245,9 @@ private struct MonthGrid: View {
             ForEach(assets) { asset in
                 Color.clear
                     .aspectRatio(1, contentMode: .fit)
-                    .overlay { CachedAsyncImage(url: viewModel.thumbnailURL(asset.id)) }
+                    .overlay {
+                        CachedAsyncImage(url: viewModel.thumbnailURL(asset.id), headers: viewModel.imageHeaders, cacheScope: viewModel.imageCacheScope)
+                    }
                     .clipped()
                     .overlay(alignment: .bottomTrailing) {
                         if asset.isVideo {

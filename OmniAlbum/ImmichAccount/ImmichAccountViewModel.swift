@@ -2,17 +2,18 @@
 //  ImmichAccountViewModel.swift
 //  OmniAlbum
 //
-//  Sign-in, sync and cached timeline for an Immich account. The timeline is read from the local
-//  database straight away on launch; sync then runs in the background and only brings changes.
+//  Accounts, sync and the cached timeline for Immich. Several accounts can be signed in; switching
+//  opens that account's own local library (shown instantly) and then catches up in the background.
 //
 
-import Foundation
 import Combine
+import Foundation
 import SwiftUI
 
 @MainActor
 final class ImmichAccountViewModel: ObservableObject {
-    @Published private(set) var credentials: ImmichCredentials?
+    @Published private(set) var accounts: [ImmichAccountInfo] = []
+    @Published private(set) var activeID: String?
     @Published private(set) var months: [LibraryStore.MonthBucket] = []
     @Published private(set) var counts: LibraryStore.Counts?
     @Published private(set) var lastSyncText: String?
@@ -21,60 +22,98 @@ final class ImmichAccountViewModel: ObservableObject {
     @Published private(set) var lastSummary: SyncSummary?
     @Published private(set) var isSigningIn = false
     @Published var errorMessage: String?
-    /// Changes after each sync so visible month grids re-query.
+    /// Changes after each sync or switch so visible month grids re-query.
     @Published private(set) var dataVersion = UUID()
 
+    private let session: ImmichAccountSession
     private var store: LibraryStore?
-    private var client: ImmichAccountClient?
+    private(set) var client: ImmichAccountClient?
+    private var syncTask: Task<Void, Never>?
 
-    init() {
-        if let creds = ImmichAccountSession.shared.restore() {
+    init(session: ImmichAccountSession = .shared) {
+        self.session = session
+        accounts = session.accounts
+        if let creds = session.activeCredentials {
             open(creds)
             Task {
-                await reload()          // cached library first: instant
-                await sync()            // then catch up
+                await reload()   // cached library first: instant
+                await sync()     // then catch up
             }
         }
     }
 
-    // MARK: Account
+    var activeAccount: ImmichAccountInfo? { accounts.first { $0.id == activeID } }
 
+    // MARK: Accounts
+
+    /// Signs in (adding the account if it's new) and switches to it.
     func signIn(server: String, email: String, password: String) async {
         isSigningIn = true
         errorMessage = nil
         defer { isSigningIn = false }
         do {
             let creds = try await ImmichAccountClient.signIn(server: server, email: email, password: password)
-            ImmichAccountSession.shared.save(creds)
+            await stopSync()
+            session.add(creds)
+            accounts = session.accounts
             open(creds)
+            await reload()
             await sync()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    func signOut() {
-        if let creds = credentials, let path = try? LibraryStore.defaultPath(for: creds.server) {
-            store = nil
+    func switchAccount(to id: String) async {
+        guard id != activeID, let creds = session.credentials(for: id) else { return }
+        await stopSync()
+        session.setActive(id)
+        resetDisplay()
+        open(creds)
+        await reload()
+        await sync()
+    }
+
+    /// Removes one account and its local copy; switches to another if one is left.
+    func signOut(_ id: String) async {
+        await stopSync()
+        if let path = try? LibraryStore.defaultPath(for: id) {
+            if id == activeID { store = nil }
             for suffix in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: path + suffix) }
         }
-        ImmichAccountSession.shared.clear()
-        credentials = nil
+        let wasActive = id == activeID
+        session.remove(id)
+        accounts = session.accounts
+        guard wasActive else { return }
+        resetDisplay()
         client = nil
-        months = []
-        counts = nil
-        lastSummary = nil
-        lastSyncText = nil
+        store = nil
+        activeID = nil
+        if let next = session.activeCredentials {
+            open(next)
+            await reload()
+            await sync()
+        }
     }
 
     private func open(_ creds: ImmichCredentials) {
         do {
-            store = try LibraryStore(path: try LibraryStore.defaultPath(for: creds.server))
+            store = try LibraryStore(path: try LibraryStore.defaultPath(for: creds.id))
             client = ImmichAccountClient(credentials: creds)
-            credentials = creds
+            activeID = creds.id
+            errorMessage = nil
         } catch {
             errorMessage = "Couldn't open the local library: \(error.localizedDescription)"
         }
+    }
+
+    private func resetDisplay() {
+        months = []
+        counts = nil
+        lastSummary = nil
+        lastSyncText = nil
+        errorMessage = nil
+        dataVersion = UUID()
     }
 
     // MARK: Sync
@@ -83,21 +122,37 @@ final class ImmichAccountViewModel: ObservableObject {
         guard let store, let client, !isSyncing else { return }
         isSyncing = true
         errorMessage = nil
-        defer { isSyncing = false }
-        do {
-            let engine = ImmichSyncEngine(client: client, store: store)
-            lastSummary = try await engine.sync { [weak self] p in
-                Task { @MainActor in self?.progress = p }
+        let accountAtStart = client.credentials.id
+        let task = Task { [weak self] in
+            do {
+                let engine = ImmichSyncEngine(client: client, store: store)
+                let summary = try await engine.sync { [weak self] p in
+                    Task { @MainActor in
+                        if self?.activeID == accountAtStart { self?.progress = p }
+                    }
+                }
+                if self?.activeID == accountAtStart { self?.lastSummary = summary }
+            } catch is CancellationError {
+            } catch let error as URLError where error.code == .cancelled {
+            } catch {
+                if self?.activeID == accountAtStart { self?.errorMessage = error.localizedDescription }
             }
-        } catch ImmichAccountError.unauthorized {
-            errorMessage = ImmichAccountError.unauthorized.localizedDescription
-        } catch {
-            errorMessage = error.localizedDescription
         }
-        await reload()
+        syncTask = task
+        await task.value
+        isSyncing = false
+        if activeID == accountAtStart { await reload() }
     }
 
-    /// Throw away the local copy and download everything again.
+    /// Cancels a sync in progress and waits for it to stop. Safe at any point: a batch is stored before it is acked.
+    private func stopSync() async {
+        syncTask?.cancel()
+        await syncTask?.value
+        syncTask = nil
+        isSyncing = false
+    }
+
+    /// Throw away the active account's local copy and download everything again.
     func resetLocalData() async {
         guard let store else { return }
         try? await store.wipe()
@@ -123,4 +178,6 @@ final class ImmichAccountViewModel: ObservableObject {
     }
 
     func thumbnailURL(_ id: String) -> URL? { client?.thumbnailURL(assetId: id) }
+    var imageHeaders: [String: String]? { client?.authHeaders }
+    var imageCacheScope: String? { client?.cacheScope }
 }
