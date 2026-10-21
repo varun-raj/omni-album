@@ -21,9 +21,9 @@ struct ContentView: View {
     @AppStorage("albumViewMode") private var viewMode: AlbumViewMode = .grid
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
-    private static let gridSpacing: CGFloat = 16
+    private static let gridSpacing: CGFloat = 12
     private static let gridPadding: CGFloat = 16
-    private static let albumCornerRadius: CGFloat = 12
+    private static let albumCornerRadius: CGFloat = 20
 
     /// Adaptive column count based on size class
     private var albumGridColumns: [GridItem] {
@@ -263,66 +263,86 @@ struct ContentView: View {
 
 // MARK: - Album Grid Cell
 
+/// Square rounded card: cover photo with the name, count, provider and status icons overlaid. No shadows.
 struct AlbumGridCell: View {
     let album: DisplayAlbum
-    var cornerRadius: CGFloat = 12
+    var cornerRadius: CGFloat = 20
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            thumbnailView
-            VStack(alignment: .leading, spacing: 2) {
-                Text(album.albumName)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .foregroundStyle(.primary)
-                Text(albumCountLabel(album.assetCount))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay { cover }
+            .overlay(alignment: .bottomLeading) { caption }
+            .overlay(alignment: .topLeading) {
+                ProviderBadge(provider: album.provider, size: 26)
+                    .padding(10)
             }
-            .padding(.horizontal, 2)
+            .overlay(alignment: .topTrailing) { statusIcons }
+            .clipShape(.rect(cornerRadius: cornerRadius))
+            .contentShape(.rect(cornerRadius: cornerRadius))
+            .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var cover: some View {
+        if let url = AggregatorViewModel.thumbnailURL(for: album) {
+            CachedAsyncImage(url: url)
+        } else {
+            Rectangle()
+                .fill(Color(.systemGray5))
+                .overlay {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.title2)
+                        .foregroundStyle(.tertiary)
+                }
         }
-        .accessibilityElement(children: .combine)
+    }
+
+    /// Name and count over a bottom scrim so white text reads on any photo.
+    private var caption: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(album.albumName)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+            Text(albumCountLabel(album.assetCount))
+                .font(.caption)
+                .opacity(0.85)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 12)
+        .padding(.top, 40)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom)
+        )
+    }
+
+    private var statusIcons: some View {
+        HStack(spacing: 6) {
+            if album.password != nil {
+                chip("lock.fill", label: "Password protected")
+            }
+            if album.allowUpload {
+                chip("arrow.up", label: "Uploads allowed")
+            }
+        }
+        .padding(10)
+    }
+
+    private func chip(_ symbol: String, label: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 24, height: 24)
+            .background(.black.opacity(0.35), in: Circle())
+            .background(.ultraThinMaterial, in: Circle())
+            .accessibilityLabel(label)
     }
 
     private func albumCountLabel(_ count: Int?) -> String {
         guard let count else { return "No photos" }
         return count == 1 ? "1 Photo" : "\(count) Photos"
-    }
-
-    @ViewBuilder
-    private var thumbnailView: some View {
-        let url = AggregatorViewModel.thumbnailURL(for: album)
-        Color.clear
-            .frame(maxWidth: .infinity)
-            .aspectRatio(1, contentMode: .fit)
-            .overlay {
-                Group {
-                    if let url = url {
-                        CachedAsyncImage(url: url)
-                    } else {
-                        placeholderImage
-                    }
-                }
-            }
-            .clipped()
-            .clipShape(.rect(cornerRadius: cornerRadius))
-            .overlay(alignment: .bottomLeading) {
-                ProviderBadge(provider: album.provider, size: 22)
-                    .padding(6)
-            }
-            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-    }
-
-    private var placeholderImage: some View {
-        Rectangle()
-            .fill(Color(.systemGray5))
-            .overlay {
-                Image(systemName: "photo.on.rectangle")
-                    .font(.title2)
-                    .foregroundStyle(.tertiary)
-            }
     }
 }
 
@@ -443,14 +463,12 @@ struct ProviderBadge: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: size, height: size)
                 .clipShape(.rect(cornerRadius: size * 0.22))
-                .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
         } else {
             Image(systemName: provider.iconName)
                 .font(.system(size: size * 0.55, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: size, height: size)
                 .background(provider.accentColor, in: .rect(cornerRadius: size * 0.22))
-                .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
         }
     }
 }
