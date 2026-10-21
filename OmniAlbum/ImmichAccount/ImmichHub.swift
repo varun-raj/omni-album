@@ -56,9 +56,18 @@ final class ImmichHub: ObservableObject {
     private let session: ImmichAccountSession
     private var syncTasks: [String: Task<Void, Never>] = [:]
 
+    private var cancellables = Set<AnyCancellable>()
+
     init(session: ImmichAccountSession = .shared) {
         self.session = session
         accounts = session.accounts
+
+        // A finished upload to an account: pull the change so the new photo shows up in its library.
+        NotificationCenter.default.publisher(for: .uploadCompleted)
+            .compactMap { $0.userInfo?["accountID"] as? String }
+            .debounce(for: .seconds(3), scheduler: DispatchQueue.main) // a batch finishes photo by photo
+            .sink { [weak self] id in Task { await self?.sync(id) } }
+            .store(in: &cancellables)
     }
 
     var isSyncingAny: Bool { status.values.contains { $0.isSyncing } }

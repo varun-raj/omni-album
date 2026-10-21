@@ -27,6 +27,10 @@ struct UploadTask: Codable, Identifiable, Equatable {
     let fileName: String
     let fileSize: Int64?
     let provider: String  // PhotoProvider rawValue, defaults to "immich"
+    /// Set for uploads to a signed-in Immich account (bearer auth) instead of a share link.
+    let accountID: String?
+    /// Album to add the uploaded photo to (account uploads; nil = just the library).
+    let targetAlbumId: String?
     let createdAt: Date
     var completedAt: Date?  // When the upload finished (success or failure)
     var status: UploadStatus
@@ -45,6 +49,8 @@ struct UploadTask: Codable, Identifiable, Equatable {
         fileName: String,
         fileSize: Int64? = nil,
         provider: String = "immich",
+        accountID: String? = nil,
+        targetAlbumId: String? = nil,
         createdAt: Date = Date(),
         completedAt: Date? = nil,
         status: UploadStatus = .pending,
@@ -62,6 +68,8 @@ struct UploadTask: Codable, Identifiable, Equatable {
         self.fileName = fileName
         self.fileSize = fileSize
         self.provider = provider
+        self.accountID = accountID
+        self.targetAlbumId = targetAlbumId
         self.createdAt = createdAt
         self.completedAt = completedAt
         self.status = status
@@ -83,6 +91,8 @@ struct UploadTask: Codable, Identifiable, Equatable {
         fileName = try container.decode(String.self, forKey: .fileName)
         fileSize = try container.decodeIfPresent(Int64.self, forKey: .fileSize)
         provider = try container.decodeIfPresent(String.self, forKey: .provider) ?? "immich"
+        accountID = try container.decodeIfPresent(String.self, forKey: .accountID)
+        targetAlbumId = try container.decodeIfPresent(String.self, forKey: .targetAlbumId)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
         status = try container.decode(UploadStatus.self, forKey: .status)
@@ -103,6 +113,8 @@ struct UploadTask: Codable, Identifiable, Equatable {
         try c.encode(fileName, forKey: .fileName)
         try c.encodeIfPresent(fileSize, forKey: .fileSize)
         try c.encode(provider, forKey: .provider)
+        try c.encodeIfPresent(accountID, forKey: .accountID)
+        try c.encodeIfPresent(targetAlbumId, forKey: .targetAlbumId)
         try c.encode(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(completedAt, forKey: .completedAt)
         try c.encode(status, forKey: .status)
@@ -113,7 +125,7 @@ struct UploadTask: Codable, Identifiable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, albumId, albumName, baseURL, shareKey, password
-        case localAssetIdentifier, fileName, fileSize, provider, createdAt
+        case localAssetIdentifier, fileName, fileSize, provider, accountID, targetAlbumId, createdAt
         case completedAt, status, progress, errorMessage, uploadedAssetId
     }
 

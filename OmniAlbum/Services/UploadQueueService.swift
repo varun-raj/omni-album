@@ -275,7 +275,7 @@ final class UploadQueueService: ObservableObject {
                 NotificationCenter.default.post(
                     name: .uploadCompleted,
                     object: nil,
-                    userInfo: ["albumId": completedTask.albumId]
+                    userInfo: ["albumId": completedTask.albumId, "accountID": completedTask.accountID as Any]
                 )
 
             } catch {

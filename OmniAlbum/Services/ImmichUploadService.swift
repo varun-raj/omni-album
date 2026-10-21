@@ -6,6 +6,7 @@
 //
 
 import os
+import CryptoKit
 import Foundation
 import Photos
 import UIKit
@@ -16,6 +17,7 @@ enum ImmichUploadError: LocalizedError {
     case uploadFailed(String)
     case invalidResponse
     case noPermission
+    case signedOut
 
     var errorDescription: String? {
         switch self {
@@ -29,8 +31,18 @@ enum ImmichUploadError: LocalizedError {
             return "Invalid response from server."
         case .noPermission:
             return "No permission to access photos."
+        case .signedOut:
+            return "This Immich account is signed out. Sign in again in Settings."
         }
     }
+}
+
+/// How a request to the server is authorised: a share link's key, or a signed-in account's session token.
+private enum UploadAuth {
+    case shareLink(key: String, password: String?)
+    case bearer(token: String)
+
+    var isAccount: Bool { if case .bearer = self { return true } else { return false } }
 }
 
 final class ImmichUploadService {
@@ -67,12 +79,19 @@ final class ImmichUploadService {
         let exported = try await AssetFileExporter.export(asset)
         defer { try? FileManager.default.removeItem(at: exported.url) }
 
+        let auth = try auth(for: task)
+
         // Build multipart request
         let boundary = UUID().uuidString
-        let url = buildUploadURL(baseURL: task.baseURL, shareKey: task.shareKey, password: task.password)
+        let url = buildUploadURL(baseURL: task.baseURL, auth: auth)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        apply(auth, to: &request)
+        if auth.isAccount {
+            // Lets the server answer "already have it" without taking the whole file.
+            request.setValue(try sha1Base64(of: exported.url), forHTTPHeaderField: "x-immich-checksum")
+        }
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
         // Build multipart body on disk
@@ -82,7 +101,8 @@ final class ImmichUploadService {
             fileName: task.fileName,
             mimeType: exported.mimeType,
             asset: asset,
-            deviceAssetId: task.localAssetIdentifier
+            deviceAssetId: task.localAssetIdentifier,
+            durationInMilliseconds: auth.isAccount
         )
         defer { try? FileManager.default.removeItem(at: bodyFile) }
 
@@ -124,15 +144,11 @@ final class ImmichUploadService {
                 throw ImmichUploadError.invalidResponse
             }
 
-            // Add the asset to the album
-            Log.upload.notice("Adding asset \(finalAssetId) to album \(task.albumId)...")
-            try await addAssetToAlbum(
-                assetId: finalAssetId,
-                albumId: task.albumId,
-                baseURL: task.baseURL,
-                shareKey: task.shareKey,
-                password: task.password
-            )
+            // Add the asset to the album (an account upload may target just the library)
+            if let albumId = auth.isAccount ? task.targetAlbumId : task.albumId {
+                Log.upload.notice("Adding asset \(finalAssetId) to album \(albumId)...")
+                try await addAssetToAlbum(assetId: finalAssetId, albumId: albumId, baseURL: task.baseURL, auth: auth)
+            }
 
             return finalAssetId
         } else {
@@ -147,19 +163,15 @@ final class ImmichUploadService {
         assetId: String,
         albumId: String,
         baseURL: String,
-        shareKey: String,
-        password: String?
+        auth: UploadAuth
     ) async throws {
         var components = URLComponents(string: baseURL)!
         components.path += "/api/albums/\(albumId)/assets"
-        var queryItems = [URLQueryItem(name: "key", value: shareKey)]
-        if let password = password, !password.isEmpty {
-            queryItems.append(URLQueryItem(name: "password", value: password))
-        }
-        components.queryItems = queryItems
+        components.queryItems = queryItems(for: auth)
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = "PUT"
+        apply(auth, to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let body = ["ids": [assetId]]
@@ -180,15 +192,40 @@ final class ImmichUploadService {
         }
     }
 
-    private func buildUploadURL(baseURL: String, shareKey: String, password: String?) -> URL {
+    private func buildUploadURL(baseURL: String, auth: UploadAuth) -> URL {
         var components = URLComponents(string: baseURL)!
         components.path += "/api/assets"
-        var queryItems = [URLQueryItem(name: "key", value: shareKey)]
-        if let password = password, !password.isEmpty {
-            queryItems.append(URLQueryItem(name: "password", value: password))
-        }
-        components.queryItems = queryItems
+        components.queryItems = queryItems(for: auth)
         return components.url!
+    }
+
+    private func auth(for task: UploadTask) throws -> UploadAuth {
+        if let accountID = task.accountID {
+            guard let creds = ImmichAccountSession.shared.credentials(for: accountID) else { throw ImmichUploadError.signedOut }
+            return .bearer(token: creds.token)
+        }
+        return .shareLink(key: task.shareKey, password: task.password)
+    }
+
+    /// Share links authorise with ?key=; accounts with the Authorization header (see `apply`).
+    private func queryItems(for auth: UploadAuth) -> [URLQueryItem]? {
+        guard case .shareLink(let key, let password) = auth else { return nil }
+        var items = [URLQueryItem(name: "key", value: key)]
+        if let password, !password.isEmpty { items.append(URLQueryItem(name: "password", value: password)) }
+        return items
+    }
+
+    private func apply(_ auth: UploadAuth, to request: inout URLRequest) {
+        if case .bearer(let token) = auth { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+    }
+
+    /// SHA-1 of a file, base64 (what Immich stores and compares), streamed so big videos aren't loaded.
+    private func sha1Base64(of url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = Insecure.SHA1()
+        while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty { hasher.update(data: chunk) }
+        return Data(hasher.finalize()).base64EncodedString()
     }
 
     /// Writes the multipart body to a temp file, copying the asset in 1 MB chunks.
@@ -198,7 +235,8 @@ final class ImmichUploadService {
         fileName: String,
         mimeType: String,
         asset: PHAsset,
-        deviceAssetId: String
+        deviceAssetId: String,
+        durationInMilliseconds: Bool = false
     ) throws -> URL {
         let bodyURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         FileManager.default.createFile(atPath: bodyURL.path, contents: nil)
@@ -244,7 +282,8 @@ final class ImmichUploadService {
         if asset.mediaType == .video {
             appendString("--\(boundary)\(crlf)")
             appendString("Content-Disposition: form-data; name=\"duration\"\(crlf)\(crlf)")
-            appendString("\(asset.duration)\(crlf)")
+            // Immich 3 takes whole milliseconds; older servers a seconds value.
+            appendString("\(durationInMilliseconds ? String(Int(asset.duration * 1000)) : "\(asset.duration)")\(crlf)")
         }
 
         // assetData (the actual file)

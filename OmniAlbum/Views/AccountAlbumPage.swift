@@ -14,6 +14,8 @@ struct AccountAlbumPage: View {
     @State private var assets: [Asset] = []
     @State private var viewer: ViewerSelection?
     @State private var actionError: String?
+    @State private var showingUpload = false
+    @ObservedObject private var uploadService = UploadQueueService.shared
     @Namespace private var zoom
 
     private var source: AccountAssetSource? { hub.library(for: album.account.id)?.source }
@@ -40,12 +42,22 @@ struct AccountAlbumPage: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                Button { showingUpload = true } label: {
+                    UploadStatusIcon(uploadService: uploadService, albumId: album.album.id)
+                }
+                .accessibilityLabel("Add Photos")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button { viewer = ViewerSelection(assets: assets, index: 0, slideshow: true) } label: { Image(systemName: "play.rectangle") }
                     .disabled(assets.count < 2)
                     .accessibilityLabel("Play Slideshow")
             }
         }
         .assetViewer($viewer, source: source, namespace: zoom)
+        .sheet(isPresented: $showingUpload) {
+            UploadQueueSheet(uploadService: uploadService,
+                             destination: .immich(account: album.account, albumId: album.album.id, albumName: album.album.name))
+        }
         .alert("Error", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
             Button("OK") { actionError = nil }
         } message: { Text(actionError ?? "") }

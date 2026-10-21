@@ -54,6 +54,7 @@ private struct AccountTimeline: View {
     @State private var confirmSignOut = false
     @State private var confirmReset = false
     @State private var viewer: ViewerSelection?
+    @State private var showingUpload = false
     @Environment(\.dismiss) private var dismiss
     @Namespace private var zoom
 
@@ -80,6 +81,7 @@ private struct AccountTimeline: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("Sync Now", systemImage: "arrow.triangle.2.circlepath") { Task { await viewModel.sync() } }
+                    Button("Upload Photos…", systemImage: "square.and.arrow.up") { showingUpload = true }
                     Button("Play Slideshow", systemImage: "play.rectangle") { Task { await playSlideshow() } }
                     Button("Download Everything Again", systemImage: "arrow.counterclockwise") { confirmReset = true }
                     Divider()
@@ -87,6 +89,11 @@ private struct AccountTimeline: View {
                 } label: {
                     Image(systemName: "ellipsis")
                 }
+            }
+        }
+        .sheet(isPresented: $showingUpload) {
+            if let account = viewModel.activeAccount {
+                UploadQueueSheet(uploadService: .shared, destination: .immich(account: account))
             }
         }
         .confirmationDialog("Sign out of \(viewModel.activeAccount?.email ?? "this account")?", isPresented: $confirmSignOut, titleVisibility: .visible) {

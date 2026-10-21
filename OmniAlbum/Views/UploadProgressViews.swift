@@ -210,8 +210,17 @@ struct UploadProgressBanner: View {
 
 struct UploadQueueSheet: View {
     @ObservedObject var uploadService: UploadQueueService
-    let album: DisplayAlbum?
+    let destination: UploadDestination?
     @Environment(\.dismiss) private var dismiss
+
+    init(uploadService: UploadQueueService, album: DisplayAlbum?) {
+        self.init(uploadService: uploadService, destination: album.map(UploadDestination.shareLink))
+    }
+
+    init(uploadService: UploadQueueService, destination: UploadDestination?) {
+        self.uploadService = uploadService
+        self.destination = destination
+    }
 
     // Photo picker state
     @State private var showingPicker = false
@@ -220,8 +229,8 @@ struct UploadQueueSheet: View {
     @State private var loadingProgress = 0
     @State private var loadingTotal = 0
 
-    private var albumId: String? { album?.albumId }
-    private var allowUpload: Bool { album?.allowUpload ?? false }
+    private var albumId: String? { destination?.albumId }
+    private var allowUpload: Bool { destination?.allowUpload ?? false }
 
     private var filteredUploads: [UploadTask] {
         if let albumId = albumId {
@@ -370,28 +379,9 @@ struct UploadQueueSheet: View {
     }
 
     private func queueSelectedAssets() {
-        guard let album = album, !selectedAssets.isEmpty else { return }
-
-        var tasks: [UploadTask] = []
-        for asset in selectedAssets {
-            let task = UploadTask(
-                albumId: album.albumId,
-                albumName: album.albumName,
-                baseURL: album.baseURL,
-                shareKey: album.shareKey,
-                password: album.password,
-                localAssetIdentifier: asset.localIdentifier,
-                fileName: asset.fileName,
-                fileSize: asset.fileSize,
-                provider: album.provider.rawValue
-            )
-            tasks.append(task)
-        }
-
-        if !tasks.isEmpty {
-            UploadQueueService.shared.addTasks(tasks)
-        }
-
+        guard let destination, !selectedAssets.isEmpty else { return }
+        let tasks = selectedAssets.map(destination.makeTask)
+        UploadQueueService.shared.addTasks(tasks)
         selectedAssets.removeAll()
     }
 }
