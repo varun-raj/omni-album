@@ -9,7 +9,7 @@
 
 import Foundation
 
-struct ImmichAccountInfo: Codable, Identifiable, Equatable, Sendable {
+struct ImmichAccountInfo: Codable, Identifiable, Equatable, Hashable, Sendable {
     let server: String
     let email: String
     let userId: String

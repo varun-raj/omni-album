@@ -114,7 +114,7 @@ struct ViewerSelection: Identifiable {
     var slideshow = false
 }
 
-private extension View {
+extension View {
     /// Full-screen viewer with the system zoom transition from the tile.
     func assetViewer(_ selection: Binding<ViewerSelection?>, source: (any AssetSource)?, namespace: Namespace.ID) -> some View {
         fullScreenCover(item: selection) { sel in
@@ -161,7 +161,7 @@ private struct AccountTimeline: View {
                 FavoritesGrid(viewModel: viewModel, zoom: zoom, viewer: $viewer)
             }
         }
-        .navigationDestination(for: LibraryAlbum.self) { AccountAlbumView(viewModel: viewModel, album: $0) }
+        .navigationDestination(for: AccountAlbum.self) { AccountAlbumPage(album: $0) }
         .assetViewer($viewer, source: viewModel.assetSource, namespace: zoom)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -208,7 +208,7 @@ private struct AccountTimeline: View {
             }
             Text(statusLine)
                 .font(.footnote)
-                .foregroundStyle(viewModel.errorMessage == nil ? Color.secondary : Color.red)
+                .foregroundStyle(viewModel.errorMessage ?? viewModel.syncError == nil ? Color.secondary : Color.red)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -217,7 +217,7 @@ private struct AccountTimeline: View {
     }
 
     private var statusLine: String {
-        if let error = viewModel.errorMessage { return error }
+        if let error = viewModel.errorMessage ?? viewModel.syncError { return error }
         if viewModel.isSyncing { return "\(viewModel.progress.phase) \(viewModel.progress.linesRead) changes" }
         guard let counts = viewModel.counts else { return "" }
         var line = "\(counts.assets.formatted()) photos & videos · \(counts.albums) album\(counts.albums == 1 ? "" : "s")"
@@ -364,7 +364,9 @@ private struct AlbumsGrid: View {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(viewModel.albums) { album in
-                        NavigationLink(value: album) { card(album) }.buttonStyle(.plain)
+                        if let account = viewModel.activeAccount {
+                            NavigationLink(value: AccountAlbum(account: account, album: album)) { card(album) }.buttonStyle(.plain)
+                        }
                     }
                 }
                 .padding(16)
@@ -398,51 +400,6 @@ private struct AlbumsGrid: View {
             .clipShape(.rect(cornerRadius: 20))
             .contentShape(.rect(cornerRadius: 20))
             .accessibilityElement(children: .combine)
-    }
-}
-
-/// One album's photos from the local database.
-private struct AccountAlbumView: View {
-    @ObservedObject var viewModel: ImmichAccountViewModel
-    let album: LibraryAlbum
-    @State private var assets: [Asset] = []
-    @State private var viewer: ViewerSelection?
-    @State private var actionError: String?
-    @Namespace private var zoom
-
-    var body: some View {
-        Group {
-            if let source = viewModel.assetSource {
-                AlbumPhotoGrid(
-                    assets: assets, source: source,
-                    onRefresh: { await viewModel.sync(); assets = await viewModel.albumAssets(album.id) },
-                    namespace: zoom,
-                    onSelect: { asset in
-                        if let index = assets.firstIndex(where: { $0.id == asset.id }) { viewer = ViewerSelection(assets: assets, index: index) }
-                    },
-                    onShare: { asset in Task { await run { try await AssetActions.share(asset, viewModel: source) } } },
-                    onSave: { asset in Task { await run { try await AssetActions.saveToPhotos(asset, viewModel: source) } } }
-                )
-            }
-        }
-        .navigationTitle(album.name)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { viewer = ViewerSelection(assets: assets, index: 0, slideshow: true) } label: { Image(systemName: "play.rectangle") }
-                    .disabled(assets.count < 2)
-                    .accessibilityLabel("Play Slideshow")
-            }
-        }
-        .assetViewer($viewer, source: viewModel.assetSource, namespace: zoom)
-        .alert("Error", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
-            Button("OK") { actionError = nil }
-        } message: { Text(actionError ?? "") }
-        .task(id: viewModel.dataVersion) { assets = await viewModel.albumAssets(album.id) }
-    }
-
-    private func run(_ work: () async throws -> Void) async {
-        do { try await work() } catch { actionError = error.localizedDescription }
     }
 }
 

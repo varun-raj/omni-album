@@ -354,3 +354,62 @@ final class AccountViewerFeedTests: XCTestCase {
         XCTAssertEqual(photo.asAsset.type, .image)
     }
 }
+
+// MARK: - Hub (home Albums list)
+
+@MainActor
+final class ImmichHubTests: XCTestCase {
+    private func library(_ user: String, albumNames: [(id: String, name: String, updated: String)]) async throws -> AccountLibrary {
+        let (store, _) = try tempStore()
+        let changes: [LibraryChange] = albumNames.map { a in
+            .album(try! JSONDecoder().decode(SyncAlbum.self, from: Data(
+                #"{"id":"\#(a.id)","name":"\#(a.name)","description":"","thumbnailAssetId":null,"createdAt":"2024-01-01","updatedAt":"\#(a.updated)","order":"desc"}"#.utf8)))
+        }
+        try await store.apply(changes)
+        let creds = ImmichCredentials(server: "https://\(user).test", email: "\(user)@x", userId: user, token: "t")
+        return AccountLibrary(info: creds.info, client: ImmichAccountClient(credentials: creds), store: store)
+    }
+
+    func testAlbumsFromAllAccountsAreMergedNewestFirst() async throws {
+        let hub = ImmichHub(session: ImmichAccountSession(defaults: UserDefaults(suiteName: "hub-\(UUID())")!))
+        hub.attach(try await library("alice", albumNames: [("a1", "Trip", "2024-03-01"), ("a2", "Old", "2020-01-01")]))
+        hub.attach(try await library("bob", albumNames: [("a1", "Same id, other account", "2025-01-01")]))
+        await hub.reloadAlbums()
+
+        XCTAssertEqual(hub.albums.map(\.album.name), ["Same id, other account", "Trip", "Old"])
+        XCTAssertEqual(Set(hub.albums.map(\.id)).count, 3, "an album id reused by two accounts must stay distinct")
+        XCTAssertEqual(hub.albums.first?.account.userId, "bob")
+    }
+
+    func testRemovingAnAccountDropsItsAlbums() async throws {
+        let hub = ImmichHub(session: ImmichAccountSession(defaults: UserDefaults(suiteName: "hub-\(UUID())")!))
+        let alice = try await library("alice", albumNames: [("a1", "Trip", "2024-03-01")])
+        hub.attach(alice)
+        hub.attach(try await library("bob", albumNames: [("b1", "Beach", "2024-04-01")]))
+        await hub.reloadAlbums()
+        XCTAssertEqual(hub.albums.count, 2)
+
+        await hub.remove(alice.info.id)
+        XCTAssertEqual(hub.albums.map(\.album.name), ["Beach"])
+        XCTAssertNil(hub.library(for: alice.info.id))
+    }
+
+    func testAlbumAssetsComeFromTheRightAccount() async throws {
+        let hub = ImmichHub(session: ImmichAccountSession(defaults: UserDefaults(suiteName: "hub-\(UUID())")!))
+        let alice = try await library("alice", albumNames: [("a1", "Trip", "2024-03-01")])
+        let line = assetLine("p1")
+        let data = Data(line.utf8), d = JSONDecoder()
+        guard case .change(let asset) = try SyncLine.decode(data, header: try d.decode(SyncLineHeader.self, from: data), decoder: d) else { return XCTFail() }
+        try await alice.store.apply([asset, .albumAsset(albumId: "a1", assetId: "p1")])
+        hub.attach(alice)
+        hub.attach(try await library("bob", albumNames: [("a1", "Empty", "2024-04-01")]))
+        await hub.reloadAlbums()
+
+        let aliceAlbum = hub.albums.first { $0.account.userId == "alice" }!
+        let bobAlbum = hub.albums.first { $0.account.userId == "bob" }!
+        let aliceAssets = await hub.albumAssets(aliceAlbum)
+        let bobAssets = await hub.albumAssets(bobAlbum)
+        XCTAssertEqual(aliceAssets.map(\.id), ["p1"])
+        XCTAssertTrue(bobAssets.isEmpty)
+    }
+}

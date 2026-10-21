@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var navigationPath = NavigationPath()
     @State private var showAddSheet = false
     @State private var albumToDelete: DisplayAlbum?
+    @ObservedObject private var hub = ImmichHub.shared
     @State private var searchText = ""
     @AppStorage("albumViewMode") private var viewMode: AlbumViewMode = .grid
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -44,12 +45,22 @@ struct ContentView: View {
         }
     }
 
+    /// Immich account albums (every signed-in account) matching the search.
+    private var filteredAccountAlbums: [AccountAlbum] {
+        guard !searchText.isEmpty else { return hub.albums }
+        let query = searchText.lowercased()
+        return hub.albums.filter { $0.album.name.lowercased().contains(query) || $0.account.host.lowercased().contains(query) }
+    }
+
+    private var hasNoAlbums: Bool { viewModel.albums.isEmpty && hub.albums.isEmpty }
+    private var hasNoMatches: Bool { filteredAlbums.isEmpty && filteredAccountAlbums.isEmpty && !searchText.isEmpty }
+
     var body: some View {
         NavigationStack(path: $navigationPath) {
             Group {
-                if viewModel.isLoading && viewModel.albums.isEmpty {
+                if viewModel.isLoading && hasNoAlbums {
                     loadingView
-                } else if viewModel.albums.isEmpty {
+                } else if hasNoAlbums {
                     emptyState
                 } else {
                     albumsContent
@@ -70,6 +81,11 @@ struct ContentView: View {
                                 .contentTransition(.symbolEffect(.replace))
                         }
                         .accessibilityLabel(viewMode == .grid ? "Show as List" : "Show as Grid")
+                    }
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    if hub.isSyncingAny {
+                        ProgressView().accessibilityLabel("Syncing Immich library")
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -105,6 +121,7 @@ struct ContentView: View {
         .onChange(of: viewModel.isLoading) { _, _ in openPendingDeepLink() }
         .onChange(of: viewModel.isSyncing) { _, _ in openPendingDeepLink() }
         .onAppear { openPendingDeepLink() }
+        .task { hub.startIfNeeded() } // signed-in Immich accounts: open their libraries and catch up
     }
 
     /// Pushes the album named by a pending deep link. The target stays pending until the album exists
@@ -210,11 +227,14 @@ struct ContentView: View {
         .navigationDestination(for: DisplayAlbum.self) { album in
             AlbumDetailView(album: album)
         }
+        .navigationDestination(for: AccountAlbum.self) { album in
+            AccountAlbumPage(album: album)
+        }
     }
 
     private var gridView: some View {
         ScrollView {
-            if filteredAlbums.isEmpty && !searchText.isEmpty {
+            if hasNoMatches {
                 noSearchResultsView
             } else {
                 LazyVGrid(columns: albumGridColumns, spacing: Self.gridSpacing) {
@@ -225,6 +245,12 @@ struct ContentView: View {
                         .buttonStyle(.plain)
                         .contextMenu { albumMenu(album) }
                     }
+                    ForEach(filteredAccountAlbums) { album in
+                        NavigationLink(value: album) {
+                            AccountAlbumGridCell(album: album, cornerRadius: Self.albumCornerRadius)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(Self.gridPadding)
             }
@@ -232,12 +258,13 @@ struct ContentView: View {
         .scrollIndicators(.hidden)
         .refreshable {
             await viewModel.refresh()
+            for account in hub.libraries.keys { await hub.sync(account) }
         }
     }
 
     private var listView: some View {
         List {
-            if filteredAlbums.isEmpty && !searchText.isEmpty {
+            if hasNoMatches {
                 noSearchResultsView
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
@@ -254,11 +281,20 @@ struct ContentView: View {
                 .onDelete { indexSet in
                     albumToDelete = indexSet.first.map { filteredAlbums[$0] }
                 }
+                ForEach(filteredAccountAlbums) { album in
+                    NavigationLink(value: album) {
+                        AccountAlbumListCell(album: album)
+                    }
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+                }
             }
         }
         .listStyle(.plain)
         .refreshable {
             await viewModel.refresh()
+            for account in hub.libraries.keys { await hub.sync(account) }
         }
     }
 
@@ -286,8 +322,18 @@ struct ContentView: View {
 // MARK: - Album Grid Cell
 
 /// Square rounded card: cover photo with the name, count, provider and status icons overlaid. No shadows.
-struct AlbumGridCell: View {
-    let album: DisplayAlbum
+/// Used for shared-link albums and for Immich account albums alike.
+struct AlbumCard: View {
+    let name: String
+    let count: Int?
+    let coverURL: URL?
+    var headers: [String: String]? = nil
+    var cacheScope: String? = nil
+    let provider: PhotoProvider
+    var locked = false
+    var uploads = false
+    /// A whole signed-in account's album (vs a shared link): marked with a person badge.
+    var isAccount = false
     var cornerRadius: CGFloat = 20
 
     var body: some View {
@@ -296,7 +342,7 @@ struct AlbumGridCell: View {
             .overlay { cover }
             .overlay(alignment: .bottomLeading) { caption }
             .overlay(alignment: .topLeading) {
-                ProviderBadge(provider: album.provider, size: 26)
+                ProviderBadge(provider: provider, size: 26)
                     .padding(10)
             }
             .overlay(alignment: .topTrailing) { statusIcons }
@@ -307,8 +353,8 @@ struct AlbumGridCell: View {
 
     @ViewBuilder
     private var cover: some View {
-        if let url = AggregatorViewModel.thumbnailURL(for: album) {
-            CachedAsyncImage(url: url)
+        if let coverURL {
+            CachedAsyncImage(url: coverURL, headers: headers, cacheScope: cacheScope)
         } else {
             Rectangle()
                 .fill(Color(.systemGray5))
@@ -323,10 +369,10 @@ struct AlbumGridCell: View {
     /// Name and count over a bottom scrim so white text reads on any photo.
     private var caption: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(album.albumName)
+            Text(name)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
-            Text(albumCountLabel(album.assetCount))
+            Text(countLabel)
                 .font(.caption)
                 .opacity(0.85)
         }
@@ -342,12 +388,9 @@ struct AlbumGridCell: View {
 
     private var statusIcons: some View {
         HStack(spacing: 6) {
-            if album.password != nil {
-                chip("lock.fill", label: "Password protected")
-            }
-            if album.allowUpload {
-                chip("arrow.up", label: "Uploads allowed")
-            }
+            if isAccount { chip("person.crop.circle.fill", label: "Immich account") }
+            if locked { chip("lock.fill", label: "Password protected") }
+            if uploads { chip("arrow.up", label: "Uploads allowed") }
         }
         .padding(10)
     }
@@ -362,9 +405,69 @@ struct AlbumGridCell: View {
             .accessibilityLabel(label)
     }
 
-    private func albumCountLabel(_ count: Int?) -> String {
+    private var countLabel: String {
         guard let count else { return "No photos" }
         return count == 1 ? "1 Photo" : "\(count) Photos"
+    }
+}
+
+struct AlbumGridCell: View {
+    let album: DisplayAlbum
+    var cornerRadius: CGFloat = 20
+
+    var body: some View {
+        AlbumCard(name: album.albumName, count: album.assetCount, coverURL: AggregatorViewModel.thumbnailURL(for: album),
+                  provider: album.provider, locked: album.password != nil, uploads: album.allowUpload, cornerRadius: cornerRadius)
+    }
+}
+
+/// An Immich account album on the home screen.
+struct AccountAlbumGridCell: View {
+    let album: AccountAlbum
+    var cornerRadius: CGFloat = 20
+    @ObservedObject private var hub = ImmichHub.shared
+
+    var body: some View {
+        let library = hub.library(for: album.account.id)
+        AlbumCard(name: album.album.name, count: album.album.assetCount,
+                  coverURL: album.album.thumbnailAssetId.flatMap { library?.client.thumbnailURL(assetId: $0) },
+                  headers: library?.client.authHeaders, cacheScope: library?.client.cacheScope,
+                  provider: .immich, isAccount: true, cornerRadius: cornerRadius)
+    }
+}
+
+/// An Immich account album as a list row.
+struct AccountAlbumListCell: View {
+    let album: AccountAlbum
+    @ObservedObject private var hub = ImmichHub.shared
+
+    var body: some View {
+        let library = hub.library(for: album.account.id)
+        HStack(spacing: 14) {
+            Group {
+                if let id = album.album.thumbnailAssetId, let url = library?.client.thumbnailURL(assetId: id) {
+                    CachedAsyncImage(url: url, headers: library?.client.authHeaders, cacheScope: library?.client.cacheScope)
+                } else {
+                    Rectangle().fill(Color(.systemGray5)).overlay { Image(systemName: "photo.on.rectangle").foregroundStyle(.tertiary) }
+                }
+            }
+            .frame(width: 76, height: 76)
+            .clipShape(.rect(cornerRadius: 18))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(album.album.name).font(.body.weight(.semibold)).lineLimit(2).foregroundStyle(.primary)
+                Text("\(album.album.assetCount) item\(album.album.assetCount == 1 ? "" : "s")")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    ProviderBadge(provider: .immich, size: 14)
+                    Text("\(album.account.email) · \(album.account.host)").font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 26))
+        .accessibilityElement(children: .combine)
     }
 }
 
