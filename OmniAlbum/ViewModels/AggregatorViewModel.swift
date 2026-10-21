@@ -64,22 +64,7 @@ struct DisplayAlbum: Identifiable, Hashable, Sendable {
 extension DisplayAlbum {
     /// The share URL a user would paste, rebuilt from the stored base URL, key and provider.
     var shareLink: String {
-        switch provider {
-        case .immich:
-            return "\(baseURL)/share/\(shareKey)"
-        case .nextcloud:
-            return "\(baseURL)/apps/photos/public/\(shareKey)"
-        case .photoprism:
-            // shareKey is composite: "linkToken|previewToken|downloadToken|albumUID"
-            return "\(baseURL)/s/\(shareKey.components(separatedBy: "|").first ?? shareKey)"
-        case .lychee:
-            return "\(baseURL)/gallery/\(shareKey)"
-        case .ente:
-            // shareKey is composite: "accessToken|base58Key"
-            let parts = shareKey.components(separatedBy: "|")
-            if parts.count >= 2 { return "https://albums.ente.io?t=\(parts[0])#\(parts[1])" }
-            return "\(baseURL)/\(shareKey)"
-        }
+        ShareLinkBuilder.link(provider: provider, baseURL: baseURL, shareKey: shareKey)
     }
 }
 

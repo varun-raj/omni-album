@@ -177,16 +177,7 @@ struct SettingsView: View {
             return
         }
 
-        // Create CSV content with full share URL
-        var csvContent = "albumName,shareLink,assetCount,allowUpload,allowDownload,provider\n"
-
-        for album in albums {
-            let escapedName = album.albumName.replacingOccurrences(of: "\"", with: "\"\"")
-            let shareLink = album.shareLink
-            let escapedLink = shareLink.replacingOccurrences(of: "\"", with: "\"\"")
-            let row = "\"\(escapedName)\",\"\(escapedLink)\",\(album.assetCount ?? 0),\(album.allowUpload),\(album.allowDownload),\(album.provider.rawValue)\n"
-            csvContent.append(row)
-        }
+        let csvContent = AlbumCSV.export(albums)
 
         // Write to temp file and share
         let tempDir = FileManager.default.temporaryDirectory
@@ -222,7 +213,7 @@ struct SettingsView: View {
 
             do {
                 let content = try String(contentsOf: url, encoding: .utf8)
-                let shareLinks = parseCSVShareLinks(content)
+                let shareLinks = AlbumCSV.parseShareLinks(content)
 
                 guard !shareLinks.isEmpty else {
                     importError = "No valid share links found in the CSV file"
@@ -264,103 +255,6 @@ struct SettingsView: View {
         }
     }
 
-    /// Parse CSV and extract share links with their providers.
-    /// Supports new format (albumName,shareLink,...,provider) and
-    /// legacy format (albumName,baseURL,shareKey,albumId,...,provider).
-    private func parseCSVShareLinks(_ content: String) -> [(String, PhotoProvider)] {
-        var results: [(String, PhotoProvider)] = []
-        let lines = content.components(separatedBy: .newlines)
-
-        guard let header = lines.first else { return results }
-        let headerFields = parseCSVLine(header).map { $0.lowercased().trimmingCharacters(in: .whitespaces) }
-        let isNewFormat = headerFields.contains("sharelink")
-
-        for (index, line) in lines.enumerated() {
-            guard index > 0, !line.isEmpty else { continue }
-            let fields = parseCSVLine(line)
-
-            if isNewFormat {
-                // New format: albumName,shareLink,assetCount,allowUpload,allowDownload,provider
-                guard fields.count >= 2 else { continue }
-                let shareLink = fields[1]
-                guard !shareLink.isEmpty else { continue }
-
-                // Detect provider from the link or from the CSV column
-                let provider: PhotoProvider
-                if fields.count >= 6, let p = PhotoProvider(rawValue: fields[5]) {
-                    provider = p
-                } else {
-                    provider = detectProvider(from: shareLink) ?? .immich
-                }
-                results.append((shareLink, provider))
-            } else {
-                // Legacy format: albumName,baseURL,shareKey,albumId,assetCount,allowUpload,allowDownload,provider
-                guard fields.count >= 4 else { continue }
-                let baseURL = fields[1]
-                let shareKey = fields[2]
-                let provider = fields.count > 7 ? (PhotoProvider(rawValue: fields[7]) ?? .immich) : .immich
-
-                // Reconstruct share URL from legacy fields
-                let shareLink = reconstructShareURLFromFields(baseURL: baseURL, shareKey: shareKey, provider: provider)
-                results.append((shareLink, provider))
-            }
-        }
-
-        return results
-    }
-
-    /// Auto-detect provider from a share link URL
-    private func detectProvider(from urlString: String) -> PhotoProvider? {
-        for providerType in PhotoProvider.allCases {
-            if let provider = ProviderRegistry.shared.provider(for: providerType),
-               provider.canHandle(urlString: urlString) {
-                return providerType
-            }
-        }
-        return nil
-    }
-
-    /// Reconstruct share URL from legacy CSV fields
-    private func reconstructShareURLFromFields(baseURL: String, shareKey: String, provider: PhotoProvider) -> String {
-        switch provider {
-        case .immich:
-            return "\(baseURL)/share/\(shareKey)"
-        case .nextcloud:
-            return "\(baseURL)/apps/photos/public/\(shareKey)"
-        case .photoprism:
-            let linkToken = shareKey.components(separatedBy: "|").first ?? shareKey
-            return "\(baseURL)/s/\(linkToken)"
-        case .lychee:
-            return "\(baseURL)/gallery/\(shareKey)"
-        case .ente:
-            let parts = shareKey.components(separatedBy: "|")
-            if parts.count >= 2 {
-                return "https://albums.ente.io?t=\(parts[0])#\(parts[1])"
-            }
-            return "\(baseURL)/\(shareKey)"
-        }
-    }
-
-    private func parseCSVLine(_ line: String) -> [String] {
-        var fields: [String] = []
-        var currentField = ""
-        var inQuotes = false
-
-        for char in line {
-            if char == "\"" {
-                inQuotes.toggle()
-            } else if char == "," && !inQuotes {
-                fields.append(currentField)
-                currentField = ""
-            } else {
-                currentField.append(char)
-            }
-        }
-        fields.append(currentField)
-
-        return fields
-    }
-
     @ViewBuilder
     private var uploadStatusBadge: some View {
         let pending = uploadService.pendingCount
@@ -388,19 +282,7 @@ struct SettingsView: View {
     }
 
     private func presentShareSheet(for url: URL) {
-        #if os(iOS)
-        let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
-           let rootVC = scene.windows.first?.rootViewController {
-            // Walk to the topmost presented controller
-            var topVC = rootVC
-            while let presented = topVC.presentedViewController {
-                topVC = presented
-            }
-            activityVC.popoverPresentationController?.sourceView = topVC.view
-            topVC.present(activityVC, animated: true)
-        }
-        #endif
+        ShareHelper.share(items: [url])
     }
 
     private func requestAppReview() {
@@ -417,207 +299,6 @@ struct SettingsView: View {
             }
         }
         #endif
-    }
-}
-
-// MARK: - Cache Settings View
-
-struct CacheSettingsView: View {
-    @State private var diskCacheSize: String = "Calculating..."
-    @State private var memoryCacheSize: String = "Calculating..."
-    @State private var isClearing = false
-
-    var body: some View {
-        List {
-            // Current Usage
-            Section {
-                HStack {
-                    Label("Disk Cache", systemImage: "internaldrive")
-                    Spacer()
-                    Text(diskCacheSize)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack {
-                    Label("Memory Cache", systemImage: "memorychip")
-                    Spacer()
-                    Text(memoryCacheSize)
-                        .foregroundStyle(.secondary)
-                }
-
-                Button(role: .destructive) {
-                    clearCache()
-                } label: {
-                    HStack {
-                        Label("Clear All Cache", systemImage: "trash")
-                        Spacer()
-                        if isClearing {
-                            ProgressView()
-                        }
-                    }
-                }
-                .disabled(isClearing)
-            } header: {
-                Text("Current Usage")
-            } footer: {
-                Text("Images are cached locally for faster loading.")
-            }
-
-            // Cache Limits
-            Section("Cache Limits") {
-                HStack {
-                    Label("Max Disk Cache", systemImage: "arrow.down.circle")
-                    Spacer()
-                    Text(formatBytes(UInt64(ImageCacheConfig.diskCacheLimit)))
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack {
-                    Label("Max Memory Cache", systemImage: "arrow.up.circle")
-                    Spacer()
-                    Text(formatBytes(UInt64(ImageCacheConfig.memoryCacheLimit)))
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack {
-                    Label("Expiration", systemImage: "clock")
-                    Spacer()
-                    Text("\(ImageCacheConfig.cacheExpirationDays) days")
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .navigationTitle("Cache Settings")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            calculateCacheSize()
-        }
-        .refreshable {
-            calculateCacheSize()
-        }
-    }
-
-    private func calculateCacheSize() {
-        ImageCache.default.calculateDiskStorageSize { result in
-            switch result {
-            case .success(let size):
-                DispatchQueue.main.async {
-                    diskCacheSize = formatBytes(UInt64(size))
-                }
-            case .failure:
-                DispatchQueue.main.async {
-                    diskCacheSize = "Unknown"
-                }
-            }
-        }
-
-        memoryCacheSize = "Up to \(formatBytes(UInt64(ImageCacheConfig.memoryCacheLimit)))"
-    }
-
-    private func clearCache() {
-        isClearing = true
-
-        ImageCache.default.clearMemoryCache()
-        ImageCache.default.clearDiskCache {
-            DispatchQueue.main.async {
-                isClearing = false
-                diskCacheSize = "0 B"
-                memoryCacheSize = "0 B"
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    calculateCacheSize()
-                }
-            }
-        }
-    }
-
-    private func formatBytes(_ bytes: UInt64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: Int64(bytes))
-    }
-}
-
-// MARK: - Upload Queue View (Full Page)
-
-struct UploadQueueView: View {
-    @ObservedObject private var uploadService = UploadQueueService.shared
-
-    private var groupedUploads: [(String, [UploadTask])] {
-        let grouped = Dictionary(grouping: uploadService.queue) { $0.status }
-        var result: [(String, [UploadTask])] = []
-
-        if let uploading = grouped[.uploading], !uploading.isEmpty {
-            result.append(("Uploading", uploading))
-        }
-        if let pending = grouped[.pending], !pending.isEmpty {
-            result.append(("Pending", pending))
-        }
-        if let failed = grouped[.failed], !failed.isEmpty {
-            result.append(("Failed", failed))
-        }
-        if let completed = grouped[.completed], !completed.isEmpty {
-            result.append(("Completed", completed))
-        }
-
-        return result
-    }
-
-    var body: some View {
-        Group {
-            if uploadService.queue.isEmpty {
-                ContentUnavailableView {
-                    Label("No Uploads", systemImage: "icloud.and.arrow.up")
-                } description: {
-                    Text("Photos you upload will appear here.")
-                }
-            } else {
-                List {
-                    ForEach(groupedUploads, id: \.0) { section, tasks in
-                        Section(section) {
-                            ForEach(tasks) { uploadTask in
-                                UploadQueueTaskRow(uploadTask: uploadTask)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle("Upload Queue")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                if !uploadService.queue.isEmpty {
-                    Menu {
-                        if uploadService.failedCount > 0 {
-                            Button {
-                                uploadService.retryFailed()
-                            } label: {
-                                Label("Retry Failed", systemImage: "arrow.clockwise")
-                            }
-                        }
-
-                        if uploadService.queue.contains(where: { $0.status == .completed }) {
-                            Button {
-                                uploadService.clearCompleted()
-                            } label: {
-                                Label("Clear Completed", systemImage: "checkmark.circle")
-                            }
-                        }
-
-                        Divider()
-
-                        Button(role: .destructive) {
-                            uploadService.clearAll()
-                        } label: {
-                            Label("Clear All", systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                }
-            }
-        }
     }
 }
 
