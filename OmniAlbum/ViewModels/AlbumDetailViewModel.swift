@@ -208,11 +208,6 @@ final class AlbumDetailViewModel: ObservableObject {
         }
     }
 
-    /// Pixel provider for ScatterCore, bound to the current assets.
-    func tileContent() -> TileContentProvider {
-        ScatterTileLoader.content(provider: provider, album: album, assets: assets)
-    }
-
     func thumbnailURL(for asset: Asset) -> URL? {
         provider.thumbnailURL(baseURL: album.baseURL, assetId: asset.id, shareKey: album.shareKey)
     }

@@ -2,8 +2,8 @@
 //  AlbumDetailView.swift
 //  OmniAlbum
 //
-//  Album detail: a ScatterCore justified grid. Photos open in ScatterCore's own stage/pager;
-//  videos open in AssetLightboxView (ScatterCore only renders stills).
+//  Album detail: native Photos-style grid. Photos and videos open in AssetLightboxView
+//  through the system zoom transition.
 //
 
 import SwiftUI
@@ -17,14 +17,11 @@ struct AlbumDetailView: View {
     let album: DisplayAlbum
     @StateObject private var viewModel: AlbumDetailViewModel
     @ObservedObject private var uploadService = UploadQueueService.shared
-    @State private var grid = ScatterGridController()
+    @Namespace private var zoomNamespace
     @State private var lightboxSelection: LightboxSelection?
-    @State private var detailsAsset: Asset?
     @State private var showingAlbumInfo = false
     @State private var showingUploadQueue = false
     @State private var hasAppeared = false
-    /// A photo is open in the viewer: hide every bar so it runs edge to edge.
-    @State private var isViewing = false
     @State private var actionError: String?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -38,10 +35,8 @@ struct AlbumDetailView: View {
     var body: some View {
         mainContent
             .navigationTitle(album.albumName)
-            .navigationBarTitleDisplayMode(.inline) // the grid is its own scroll view, so a large title could never collapse
+            .navigationBarTitleDisplayMode(.inline)
             .albumSubtitle(summaryText)
-            .background(BarsFader(hidden: isViewing))
-            .statusBarHidden(isViewing)
             // Opaque bar: the grid starts below it and tiles scrolling up are hidden behind it, not shown through it.
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarBackground(Color(.systemBackground), for: .navigationBar)
@@ -84,15 +79,12 @@ struct AlbumDetailView: View {
             .sheet(isPresented: $showingUploadQueue) {
                 UploadQueueSheet(uploadService: uploadService, album: album)
             }
-            .sheet(item: $detailsAsset, onDismiss: { grid.showInfo(false) }) { asset in
-                AssetDetailsSheet(asset: asset, viewModel: viewModel)
-                    .presentationDetents([.medium, .large])
-            }
             .fullScreenCover(item: $lightboxSelection) { selection in
                 AssetLightboxView(
                     assets: viewModel.assets,
                     selectedIndex: selection.id,
                     viewModel: viewModel,
+                    zoomNamespace: zoomNamespace,
                     onDismiss: { lightboxSelection = nil }
                 )
                 .preferredColorScheme(.dark) // photo/video viewing: black stage, like Photos
@@ -105,7 +97,7 @@ struct AlbumDetailView: View {
             .task {
                 let target = deepLinkRouter.consumeTarget()
                 await viewModel.loadIfNeeded()
-                // Deep link: open the asset (ScatterCore for photos, lightbox for videos)
+                // Deep link: open the asset
                 if let target, target.albumId == album.albumId, let assetId = target.assetId {
                     openAsset(id: assetId)
                 }
@@ -133,20 +125,13 @@ struct AlbumDetailView: View {
         } else if viewModel.assets.isEmpty && !viewModel.isLoading {
             emptyView
         } else {
-            // Full-screen: ScatterCore centres an opened photo in its own bounds, so nothing may sit above it.
-            ScatterPhotoGrid(
+            AlbumPhotoGrid(
                 viewModel: viewModel,
-                controller: grid,
-                onVideo: openInLightbox,
-                onOpen: { id in withAnimation(.easeInOut(duration: 0.3)) { isViewing = id != nil } },
-                onInfo: { asset in
-                    detailsAsset = asset
-                    grid.showInfo(asset != nil)
-                },
+                namespace: zoomNamespace,
+                onSelect: openInLightbox,
                 onShare: { asset in Task { await share(asset) } },
                 onSave: { asset in Task { await save(asset) } }
             )
-            .ignoresSafeArea()
             .overlay {
                 if viewModel.isLoading && viewModel.assets.isEmpty {
                     loadingOverlay
@@ -204,7 +189,7 @@ struct AlbumDetailView: View {
 
     private func openAsset(id: String) {
         guard let asset = viewModel.assets.first(where: { $0.id == id }) else { return }
-        if asset.type == .video { openInLightbox(asset) } else { grid.open(id: id) }
+        openInLightbox(asset)
     }
 
     private func openInLightbox(_ asset: Asset) {

@@ -19,6 +19,7 @@ struct AssetLightboxView: View {
     let assets: [Asset]
     let selectedIndex: Int
     let viewModel: AlbumDetailViewModel
+    let zoomNamespace: Namespace.ID
     let onDismiss: () -> Void
 
     @State private var currentIndex: Int
@@ -28,13 +29,12 @@ struct AssetLightboxView: View {
     @State private var saveError: String?
     @State private var showSaveSuccess = false
     @State private var showChrome = true
-    @State private var dragOffset: CGFloat = 0
-    @State private var isDismissing = false
 
-    init(assets: [Asset], selectedIndex: Int, viewModel: AlbumDetailViewModel, onDismiss: @escaping () -> Void) {
+    init(assets: [Asset], selectedIndex: Int, viewModel: AlbumDetailViewModel, zoomNamespace: Namespace.ID, onDismiss: @escaping () -> Void) {
         self.assets = assets
         self.selectedIndex = selectedIndex
         self.viewModel = viewModel
+        self.zoomNamespace = zoomNamespace
         self.onDismiss = onDismiss
         _currentIndex = State(initialValue: selectedIndex)
     }
@@ -42,40 +42,6 @@ struct AssetLightboxView: View {
     private var currentAsset: Asset? {
         guard currentIndex >= 0, currentIndex < assets.count else { return nil }
         return assets[currentIndex]
-    }
-
-    private var titleText: String {
-        guard let asset = currentAsset else { return "" }
-        // Try to get location or just show filename
-        if let exif = asset.exif {
-            var parts: [String] = []
-            if let city = exif.city, !city.isEmpty { parts.append(city) }
-            if let state = exif.state, !state.isEmpty { parts.append(state) }
-            if !parts.isEmpty { return parts.joined(separator: ", ") }
-        }
-        return asset.originalFileName
-    }
-
-    private var subtitleText: String {
-        guard let asset = currentAsset else { return "" }
-        let dateStr = asset.createdAt ?? ""
-        guard !dateStr.isEmpty else { return "" }
-
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let date = isoFormatter.date(from: dateStr) ?? ISO8601DateFormatter().date(from: dateStr)
-        guard let date = date else { return "" }
-
-        let formatter = DateFormatter()
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) {
-            formatter.dateFormat = "'Today' HH:mm"
-        } else if calendar.isDateInYesterday(date) {
-            formatter.dateFormat = "'Yesterday' HH:mm"
-        } else {
-            formatter.dateFormat = "d MMM yyyy HH:mm"
-        }
-        return formatter.string(from: date)
     }
 
     private var isCurrentAssetVideo: Bool {
@@ -92,56 +58,37 @@ struct AssetLightboxView: View {
         return ""
     }
 
-    /// How much the chrome should be visible based on drag (1 = fully visible, 0 = hidden)
-    private var chromeDragOpacity: Double {
-        let progress = Double(abs(dragOffset)) / 200.0
-        return max(0, 1.0 - progress)
-    }
-
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Background - fades as you drag down
-                Color(.systemBackground)
-                    .opacity(1.0 - Double(abs(dragOffset)) / 400.0)
-                    .ignoresSafeArea()
+                // Dark stage; dismissal (drag down / zoom back to the tile) is the system zoom transition's.
+                Color.black.ignoresSafeArea()
 
+                // Photo pager, edge to edge
+                TabView(selection: $currentIndex) {
+                    ForEach(Array(assets.enumerated()), id: \.element.id) { index, asset in
+                        PhotoPageView(
+                            asset: asset,
+                            viewModel: viewModel,
+                            onTap: { toggleChrome() }
+                        )
+                        .tag(index)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .ignoresSafeArea()
+
+                // Chrome floats over the photo: no title, just close / menu and the action bar
                 VStack(spacing: 0) {
-                    // Top bar
                     if showChrome {
                         topBar
-                            .opacity(chromeDragOpacity)
                             .transition(.opacity)
-                    }
-
-                    // Photo pager
-                    TabView(selection: $currentIndex) {
-                        ForEach(Array(assets.enumerated()), id: \.element.id) { index, asset in
-                            PhotoPageView(
-                                asset: asset,
-                                viewModel: viewModel,
-                                onTap: { toggleChrome() }
-                            )
-                            .tag(index)
-                        }
-                    }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .clipShape(.rect(cornerRadius: dragOffset > 0 ? 16 : 0))
-                    .offset(y: dragOffset)
-                    .scaleEffect(1.0 - Double(abs(dragOffset)) / 1000.0)
-                    .simultaneousGesture(dismissGesture(geometry: geometry))
-
-                    // Thumbnail strip
-                    thumbnailStrip
-                        .opacity(chromeDragOpacity)
-
-                    // Bottom bar
-                    if showChrome {
+                        Spacer()
                         bottomBar
-                            .opacity(chromeDragOpacity)
                             .transition(.opacity)
                     }
                 }
+                .tint(.white)
                 .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 0 : 8)
 
                 // Toast overlay for sharing/saving
@@ -185,6 +132,7 @@ struct AssetLightboxView: View {
             Text(saveError ?? "")
         }
         .animation(.easeInOut(duration: 0.25), value: showChrome)
+        .navigationTransition(.zoom(sourceID: currentAsset?.id ?? "", in: zoomNamespace))
     }
 
     // MARK: - Top Bar
@@ -203,23 +151,6 @@ struct AssetLightboxView: View {
             .accessibilityLabel("Close")
 
             Spacer()
-
-            // Title
-            VStack(spacing: 2) {
-                if viewModel.showMetadata {
-                    Text(titleText)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                    Text(subtitleText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    // Show position only when metadata is hidden
-                    Text("\(currentIndex + 1) of \(assets.count)")
-                        .font(.subheadline.weight(.semibold))
-                }
-            }
-            .frame(maxWidth: .infinity)
 
             Spacer()
 
@@ -313,83 +244,10 @@ struct AssetLightboxView: View {
         .padding(.vertical, 12)
     }
 
-    // MARK: - Thumbnail Strip
-
-    private var thumbnailStrip: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(Array(assets.enumerated()), id: \.element.id) { index, asset in
-                        ThumbnailCell(
-                            url: viewModel.thumbnailURL(for: asset),
-                            isSelected: currentIndex == index,
-                            isVideo: viewModel.isVideo(asset)
-                        )
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                currentIndex = index
-                            }
-                        }
-                        .accessibilityElement()
-                        .accessibilityLabel(asset.originalFileName)
-                        .accessibilityAddTraits(currentIndex == index ? [.isButton, .isSelected] : .isButton)
-                        .id(index)
-                    }
-                }
-                .padding(.horizontal, 16)
-            }
-            .frame(height: 52)
-            .onChange(of: currentIndex) { _, newIndex in
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    proxy.scrollTo(newIndex, anchor: .center)
-                }
-            }
-            .onAppear {
-                proxy.scrollTo(currentIndex, anchor: .center)
-            }
-        }
-    }
-
     private func toggleChrome() {
         withAnimation(.easeInOut(duration: 0.25)) {
             showChrome.toggle()
         }
-    }
-
-    private func dismissGesture(geometry: GeometryProxy) -> some Gesture {
-        DragGesture(minimumDistance: 20)
-            .onChanged { value in
-                // Only respond to vertical drags (up or down)
-                let isVertical = abs(value.translation.height) > abs(value.translation.width)
-                if isVertical && !isDismissing {
-                    dragOffset = value.translation.height
-                }
-            }
-            .onEnded { value in
-                guard !isDismissing else { return }
-                let isVertical = abs(value.translation.height) > abs(value.translation.width)
-                let shouldDismiss = abs(value.translation.height) > 120
-                    || abs(value.predictedEndTranslation.height) > 300
-
-                if isVertical && shouldDismiss {
-                    // Dismiss - animate image off screen in drag direction
-                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                    generator.impactOccurred()
-                    isDismissing = true
-                    let direction: CGFloat = value.translation.height > 0 ? 1 : -1
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        dragOffset = direction * geometry.size.height
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        onDismiss()
-                    }
-                } else {
-                    // Snap back
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        dragOffset = 0
-                    }
-                }
-            }
     }
 
     // MARK: - Share Photo
